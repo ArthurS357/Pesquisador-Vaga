@@ -73,11 +73,22 @@ export async function triggerGeneration(id: string): Promise<ActionResult> {
   const job = await prisma.job.findUnique({
     where: { id },
     select: {
-      id: true, company: true, title: true, lens: true,
+      id: true, status: true, company: true, title: true, lens: true,
       description: true, applyUrl: true, sourceId: true, score: true,
     },
   });
   if (!job) return { ok: false, error: "vaga não encontrada" };
+
+  // ── Guarda de estado: não regerar carta para vaga em status terminal ──────
+  // Terminais: APPLIED (enviada) e REJECTED (descartada) — decisão fechada.
+  if (job.status === JOB_STATUS.APPLIED || job.status === JOB_STATUS.REJECTED) {
+    return { ok: false, error: `Vaga já está em status final (${job.status}). Geração não permitida.` };
+  }
+  // Já há uma geração em andamento — evita disparo duplicado concorrente.
+  if (job.status === JOB_STATUS.GENERATING) {
+    return { ok: false, error: "Geração já está em andamento." };
+  }
+  console.log(`[gerar-candidatura] iniciando geração (job=${id}, status atual=${job.status})`);
 
   // Marca in-flight para o painel refletir que a geração começou.
   await prisma.job.update({ where: { id }, data: { status: JOB_STATUS.GENERATING } });

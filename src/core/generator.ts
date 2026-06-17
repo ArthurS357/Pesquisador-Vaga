@@ -1,10 +1,11 @@
-import { readFileSync } from "fs";
 import { join } from "path";
 import { decodeHtml, fetchWithTimeout } from "./utils";
+import { loadProfile } from "../utils/profile";
 
 const OLLAMA_URL = "http://localhost:11434/api/generate";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:8b";
-const PROFILE_PATH = join(process.cwd(), "perfil-mestre.md");
+// carta é mais longa que o judge — margem extra para CPU
+const GENERATOR_TIMEOUT_MS = 180_000;
 
 /** Dados mínimos da vaga necessários para gerar a carta. */
 export interface CoverLetterInput {
@@ -20,14 +21,6 @@ export interface CoverLetterInput {
 export interface CoverLetterArtifact {
   filename: string; // relativo à raiz do projeto
   content: string; // markdown final (frontmatter + corpo)
-}
-
-function loadProfile(): string {
-  try {
-    return readFileSync(PROFILE_PATH, "utf-8");
-  } catch {
-    return "Candidato generalista buscando oportunidades em tecnologia.";
-  }
 }
 
 /** HTML → texto plano enxuto para caber na prompt. */
@@ -85,6 +78,8 @@ Description: ${desc ?? "(no description — focus on the job title and company)"
  */
 export async function generateCoverLetter(input: CoverLetterInput): Promise<string | null> {
   const prompt = buildPrompt(input, loadProfile());
+  console.info(`  [generator] 📤 Gerando carta para "${input.title}" @ ${input.company}...`);
+  const t0 = Date.now();
   try {
     const res = await fetchWithTimeout(
       OLLAMA_URL,
@@ -93,14 +88,30 @@ export async function generateCoverLetter(input: CoverLetterInput): Promise<stri
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
       },
-      60_000, // carta é mais longa que o judge — 60s
+      GENERATOR_TIMEOUT_MS,
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`  [generator] ❌ Ollama retornou HTTP ${res.status}.`);
+      return null;
+    }
     const body = (await res.json()) as { response?: string };
     const text = body.response?.trim();
-    return text && text.length > 0 ? text : null;
-  } catch {
-    return null; // ECONNREFUSED / timeout — tratado pelo chamador
+    if (!text) {
+      console.warn(`  [generator] ❌ Resposta vazia do Ollama.`);
+      return null;
+    }
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    console.info(`  [generator] ✅ Carta gerada em ${elapsed}s (${text.length} chars).`);
+    return text;
+  } catch (err) {
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    if (err instanceof Error && err.name === "AbortError") {
+      console.warn(`  [generator] ❌ Timeout após ${elapsed}s (limite: ${GENERATOR_TIMEOUT_MS / 1000}s).`);
+    } else {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`  [generator] ❌ Erro: ${msg}.`);
+    }
+    return null;
   }
 }
 
