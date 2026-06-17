@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // Trocar para postgresql/mysql quando for pra prod
+  url      = "file:./dev.db"
+}
+
+model Job {
+  id            String    @id @default(cuid())
+  source        String
+  sourceId      String
+  company       String
+  title         String
+  location      String?
+  description   String?
+  applyUrl      String
+  updatedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())       // Atualizado em cada run
+  status        String    @default("ACTIVE")    // "ACTIVE" | "INACTIVE"
+  canonicalHash String?                         // hash(company+title) para dedupe cross-source
+  score         Float?                          // Ranker: pontuação do perfil
+  lens          String?                         // Ranker: ex. "backend", "frontend", "devops"
+  reasoning     String?                         // Ranker: justificativa do score/lens (curadoria humana)
+
+  @@unique([source, sourceId])
+  @@index([company])
+  @@index([canonicalHash])
+  @@index([status])
+}
