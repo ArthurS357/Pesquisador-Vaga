@@ -2,16 +2,28 @@ import { JobAdapter, Job } from "./types";
 import { canonicalHash } from "./utils";
 import { rankJob } from "./ranker";
 import { judgeWithLlm } from "./llm-judge";
+import { HUMAN_OWNED_STATUSES } from "./db-clean-core";
 import { prisma } from "../db/prisma";
 
 export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<Job[]> {
   const runStartTime = new Date();
   const all: Job[] = [];
 
+  // ── Janela incremental para adapters baseados em e-mail ───────────────────
+  // Usa a data do e-mail mais recente já persistido como ponto de partida do
+  // IMAP SINCE. Adapters de API (Greenhouse/Lever/Ashby) ignoram ctx.since.
+  const lastEmail = await prisma.job.findFirst({
+    where: { source: { contains: "email" } },
+    orderBy: { updatedAt: "desc" },
+    select: { updatedAt: true },
+  });
+  const since = lastEmail?.updatedAt ?? undefined;
+  const ctx = { since };
+
   // ── Coleta em chunks (controle de concorrência) ──────────────────────────
   for (let i = 0; i < adapters.length; i += concurrency) {
     const chunk = adapters.slice(i, i + concurrency);
-    const results = await Promise.allSettled(chunk.map((a) => a.fetchJobs()));
+    const results = await Promise.allSettled(chunk.map((a) => a.fetchJobs(ctx)));
     for (let j = 0; j < results.length; j++) {
       const r = results[j];
       const adapter = chunk[j];
@@ -109,9 +121,8 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
       where: { source_sourceId: { source: job.source, sourceId: job.sourceId } },
       select: { status: true },
     });
-    const HUMAN_OWNED_STATUSES = ["APPROVED", "REJECTED", "GENERATING", "GENERATED", "APPLIED"];
     const nextStatus =
-      existing && HUMAN_OWNED_STATUSES.includes(existing.status)
+      existing && (HUMAN_OWNED_STATUSES as readonly string[]).includes(existing.status)
         ? existing.status // mantém a decisão humana intacta
         : "ACTIVE"; // vaga nova, já ACTIVE, ou INACTIVE → (re)ativa
 

@@ -11,7 +11,9 @@
     "start:worker": "cross-env NODE_OPTIONS=--use-system-ca tsx src/worker.ts",
     "db:push": "prisma db push --schema=schema.prisma",
     "db:reset": "tsx -e \"import('fs').then(f=>f.rmSync('dev.db',{force:true}))\" ; prisma db push --schema=schema.prisma",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "db:clean": "tsx src/db-clean.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -26,7 +28,8 @@
     "cross-env": "^10.1.0",
     "prisma": "^5.22.0",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

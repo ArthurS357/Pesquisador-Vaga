@@ -59,7 +59,9 @@ export const QUEUE_STATUS_LIST = [...QUEUE_STATUSES];
 
 const LENS_LABELS: Record<string, string> = {
   frontend: "Frontend", backend: "Backend", fullstack: "Fullstack",
-  devops: "DevOps", data: "Dados", dados: "Dados", mobile: "Mobile", generic: "Geral",
+  devops: "DevOps", data: "Dados", dados: "Dados", mobile: "Mobile",
+  // appsec/sales podem vir do LLM judge; rotulados mas sem classe própria (→ lens-generic).
+  appsec: "AppSec", sales: "Vendas", generic: "Geral",
 };
 const KNOWN_LENSES = ["frontend", "backend", "fullstack", "devops", "data", "mobile"];
 

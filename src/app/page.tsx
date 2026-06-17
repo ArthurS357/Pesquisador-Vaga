@@ -5,6 +5,7 @@ import { MarkAppliedButton } from "./HistoryActions";
 import { JobFilters } from "@/components/JobFilters";
 import { JobList } from "@/components/JobList";
 import { JobGridSkeleton } from "@/components/JobCardSkeleton";
+import { CleanupPanel } from "@/components/CleanupPanel";
 import { HISTORY_STATUSES, JOB_STATUS } from "./status";
 import {
   fmtScore, lensClass, lensLabel, parseFilters, QUEUE_STATUS_LIST, scoreClass,
@@ -65,6 +66,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
           </div>
         )}
       </section>
+
+      <CleanupPanel />
     </main>
   );
 }

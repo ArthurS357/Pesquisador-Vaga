@@ -1,10 +1,10 @@
-import { readFileSync } from "fs";
-import { join } from "path";
 import { fetchWithTimeout } from "./utils";
+import { loadProfile } from "../utils/profile";
 
 const OLLAMA_URL = "http://localhost:11434/api/generate";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:8b";
-const PROFILE_PATH = join(process.cwd(), "perfil-mestre.md");
+// qwen3:8b em CPU (sem GPU no Windows) pode levar 60–120s por inferência
+const LLM_TIMEOUT_MS = 120_000;
 
 export interface LlmJudgeResult {
   score: number;   // 0-100
@@ -13,23 +13,12 @@ export interface LlmJudgeResult {
   fromCache?: boolean;
 }
 
-// Lê o perfil uma vez em memória (arquivo pequeno, não muda durante a run)
-function loadProfile(): string {
-  try {
-    return readFileSync(PROFILE_PATH, "utf-8");
-  } catch {
-    console.warn("[llm-judge] perfil-mestre.md não encontrado. Usando perfil vazio.");
-    return "Candidato generalista buscando oportunidades em tecnologia.";
-  }
-}
-
-const PROFILE_TEXT = loadProfile();
-
 // Trunca o perfil para ~2000 chars para não explodir o contexto do LLM
 const MAX_PROFILE_CHARS = 2000;
 
 function buildPrompt(title: string, company: string, description: string): string {
-  const profileSnippet = PROFILE_TEXT.slice(0, MAX_PROFILE_CHARS);
+  // loadProfile() é lazy + cacheado — leitura só na 1ª inferência da run.
+  const profileSnippet = loadProfile().slice(0, MAX_PROFILE_CHARS);
   return `You are a strict job-fit evaluator. Your task is to evaluate how well the job below fits the candidate profile. Respond ONLY with a single valid JSON object — no markdown, no explanation outside the JSON.
 
 ## Candidate Profile (Sabino)
@@ -91,7 +80,9 @@ export async function judgeWithLlm(
   description: string
 ): Promise<LlmJudgeResult | null> {
   const prompt = buildPrompt(title, company, description);
+  console.info(`  [LLM] 📤 Enviando prompt para ${OLLAMA_MODEL} (~${prompt.length} chars)...`);
 
+  const t0 = Date.now();
   try {
     const res = await fetchWithTimeout(
       OLLAMA_URL,
@@ -103,33 +94,45 @@ export async function judgeWithLlm(
           prompt,
           format: "json",
           stream: false,
+          options: { temperature: 0.1, num_predict: 512 },
         }),
       },
-      30_000 // LLM pode ser lento — 30s timeout
+      LLM_TIMEOUT_MS
     );
 
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    console.info(`  [LLM] 📥 Resposta recebida em ${elapsed}s (HTTP ${res.status})`);
+
     if (!res.ok) {
-      console.warn(`[llm-judge] Ollama retornou HTTP ${res.status}. Usando fallback heurístico.`);
+      console.warn(`  [LLM] ❌ Ollama retornou HTTP ${res.status}. Usando fallback heurístico.`);
       return null;
     }
 
     const body = (await res.json()) as { response?: string };
-    if (!body.response) return null;
-
-    const result = safeParseJson(body.response);
-    if (!result) {
-      console.warn(`[llm-judge] JSON malformado na resposta do Ollama. Usando fallback heurístico.`);
+    if (!body.response) {
+      console.warn(`  [LLM] ❌ Resposta vazia (campo 'response' ausente). Usando fallback heurístico.`);
       return null;
     }
 
+    console.info(`  [LLM] 📦 Corpo (${body.response.length} chars): ${body.response.slice(0, 120)}`);
+
+    const result = safeParseJson(body.response);
+    if (!result) {
+      console.warn(`  [LLM] ❌ Falha ao parsear JSON: ${body.response.slice(0, 200)}`);
+      return null;
+    }
+
+    console.info(`  [LLM] ✅ score=${result.score}, lens=${result.lens} — ${result.reasoning.slice(0, 80)}`);
     return result;
   } catch (err) {
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     const msg = err instanceof Error ? err.message : String(err);
-    // ECONNREFUSED = Ollama offline. Não crashar o motor.
-    if (msg.includes("ECONNREFUSED") || msg.includes("fetch failed") || msg.includes("AbortError")) {
-      console.warn(`[llm-judge] Ollama offline ou timeout. Usando fallback heurístico.`);
+    if (err instanceof Error && err.name === "AbortError") {
+      console.warn(`  [LLM] ❌ Timeout após ${elapsed}s (limite: ${LLM_TIMEOUT_MS / 1000}s). Usando fallback heurístico.`);
+    } else if (msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
+      console.warn(`  [LLM] ❌ Ollama offline (conexão recusada). Usando fallback heurístico.`);
     } else {
-      console.warn(`[llm-judge] Erro inesperado: ${msg}. Usando fallback heurístico.`);
+      console.warn(`  [LLM] ❌ Erro de rede: ${msg}. Usando fallback heurístico.`);
     }
     return null;
   }

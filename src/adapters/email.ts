@@ -77,7 +77,8 @@ const INFOJOBS_JOB_CODE = /\b\d{5,}\b/;
 // Só links de vaga real têm /vaga-de- ou /vaga- no path.
 const INFOJOBS_VAGA_URL = /\/vaga(-de)?-/i;
 
-function isInfoJobsJunkTitle(title: string): boolean {
+// Exportadas para teste unitário (funções puras). Não use fora do parser InfoJobs.
+export function isInfoJobsJunkTitle(title: string): boolean {
   if (title.length < 3) return true;
   if (INFOJOBS_JUNK_TITLE.some((re) => re.test(title))) return true;
   // Bloco de localização/salário sem código de vaga → ruído.
@@ -85,7 +86,7 @@ function isInfoJobsJunkTitle(title: string): boolean {
 }
 
 // Id base da vaga: "__11716514.aspx" → "11716514". Agrupa anchors da mesma vaga.
-function infoJobsJobId(url: string): string | null {
+export function infoJobsJobId(url: string): string | null {
   const m = url.match(/__(\d+)/) ?? url.match(/(\d{6,})\.aspx/i);
   return m ? m[1] : null;
 }
@@ -97,7 +98,7 @@ function infoJobsTitleScore(title: string): number {
   return 1;
 }
 
-function extractInfoJobsCompany(parentText: string): string | null {
+export function extractInfoJobsCompany(parentText: string): string | null {
   const named = parentText.match(/A empresa\s+(.+?)\s+est[áa]\s+selecionando/i);
   if (named) return named[1].trim();
   const fallback = parentText.match(/^([^\n\r|–\-]{2,50})/);
@@ -258,6 +259,15 @@ export function parseGenericJobEmail(from: string, subject: string, body: string
   ];
 }
 
+// Formata uma data no padrão de busca IMAP (ex.: "10-Jun-2026").
+const IMAP_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function formatImapDate(d: Date): string {
+  return `${String(d.getDate()).padStart(2, "0")}-${IMAP_MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+}
+
+// Fallback de primeira execução: olhar os últimos 7 dias de e-mails.
+const DEFAULT_LOOKBACK_DAYS = 7;
+
 export function emailAlertAdapter(config: { host: string; port: number; user: string; pass: string }): JobAdapter {
   return {
     name: `Email Alerts (${config.user})`,
@@ -294,14 +304,23 @@ export function emailAlertAdapter(config: { host: string; port: number; user: st
 
         const lock = await client.getMailboxLock("INBOX");
         try {
-          const totalMessages = (client.mailbox as { exists?: number } | null)?.exists ?? 0;
-          console.log(`[EmailAlertAdapter] 📬 INBOX contém ${totalMessages} e-mail(s)`);
+          // Janela incremental: usa ctx.since (último e-mail persistido) ou,
+          // na primeira run, os últimos DEFAULT_LOOKBACK_DAYS dias.
+          const sinceDate = ctx?.since ?? new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 86_400_000);
+          const days = Math.max(1, Math.round((Date.now() - sinceDate.getTime()) / 86_400_000));
+          console.log(`[EmailAlertAdapter] 📅 Buscando e-mails desde ${formatImapDate(sinceDate)} (${days} dia(s))`);
 
-          if (totalMessages === 0) {
-            console.log(`[EmailAlertAdapter] 📭 INBOX vazio — nenhuma vaga extraída.`);
+          // IMAP SINCE tem granularidade de dia — pequena sobreposição é OK
+          // (o dedupe por source:sourceId no engine remove repetições).
+          const searchResult = await client.search({ since: sinceDate });
+          const seqList = Array.isArray(searchResult) ? searchResult : [];
+          console.log(`[EmailAlertAdapter] 📬 ${seqList.length} e-mail(s) no intervalo`);
+
+          if (seqList.length === 0) {
+            console.log(`[EmailAlertAdapter] 📭 Nenhum e-mail novo — nenhuma vaga extraída.`);
           } else {
             let processed = 0;
-            for await (const message of client.fetch("1:*", { source: true, envelope: true })) {
+            for await (const message of client.fetch(seqList, { source: true, envelope: true })) {
               if (!message.source) continue;
               processed++;
 
