@@ -12,6 +12,8 @@
     "db:push": "prisma db push --schema=schema.prisma",
     "db:reset": "tsx -e \"import('fs').then(f=>f.rmSync('dev.db',{force:true}))\" ; prisma db push --schema=schema.prisma",
     "db:clean": "tsx src/db-clean.ts",
+    "ollama:start": "powershell -ExecutionPolicy Bypass -File scripts/start-ollama.ps1",
+    "ollama:status": "powershell -ExecutionPolicy Bypass -File scripts/ollama-status.ps1",
     "test": "vitest run",
     "test:watch": "vitest"
   },

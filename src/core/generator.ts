@@ -4,8 +4,8 @@ import { loadProfile } from "../utils/profile";
 
 const OLLAMA_URL = "http://localhost:11434/api/generate";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:8b";
-// carta é mais longa que o judge — margem extra para CPU
-const GENERATOR_TIMEOUT_MS = 180_000;
+// carta é mais longa que o judge — em GPU (RX 7600) fica em ~10-15s.
+const GENERATOR_TIMEOUT_MS = 60_000;
 
 /** Dados mínimos da vaga necessários para gerar a carta. */
 export interface CoverLetterInput {

@@ -3,8 +3,9 @@ import { loadProfile } from "../utils/profile";
 
 const OLLAMA_URL = "http://localhost:11434/api/generate";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:8b";
-// qwen3:8b em CPU (sem GPU no Windows) pode levar 60–120s por inferência
-const LLM_TIMEOUT_MS = 120_000;
+// qwen3:8b em GPU (RX 7600, contexto 8192 → 100% VRAM) responde em ~3-5s.
+// Timeout curto detecta falha de GPU/servidor cedo (em CPU levaria 60-120s).
+const LLM_TIMEOUT_MS = 30_000;
 
 export interface LlmJudgeResult {
   score: number;   // 0-100
