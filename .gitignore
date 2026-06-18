@@ -25,3 +25,5 @@ coverage/
 *.log
 npm-debug.log*
 .DS_Store
+
+.CLAUDE.md

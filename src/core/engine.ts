@@ -10,14 +10,23 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
   const all: Job[] = [];
 
   // ── Janela incremental para adapters baseados em e-mail ───────────────────
-  // Usa a data do e-mail mais recente já persistido como ponto de partida do
-  // IMAP SINCE. Adapters de API (Greenhouse/Lever/Ashby) ignoram ctx.since.
+  // Ponto de partida do IMAP SINCE = data do e-mail mais recente já persistido.
+  // Adapters de API (Greenhouse/Lever/Ashby) ignoram ctx.since.
   const lastEmail = await prisma.job.findFirst({
     where: { source: { contains: "email" } },
     orderBy: { updatedAt: "desc" },
     select: { updatedAt: true },
   });
-  const since = lastEmail?.updatedAt ?? undefined;
+
+  // Piso de sobreposição: nunca confiar num `since` mais recente que
+  // LOOKBACK_FLOOR_DAYS atrás. Garante re-scan de remetentes esparsos (InfoJobs
+  // manda poucos e-mails/dia → janela fina os perdia) e neutraliza header `Date`
+  // futuro/errado, que empurraria o SINCE adiante. O dedupe por source:sourceId
+  // + upsert absorve a sobreposição (custo: re-parse de e-mails já vistos).
+  const LOOKBACK_FLOOR_DAYS = 14;
+  const floor = new Date(Date.now() - LOOKBACK_FLOOR_DAYS * 86_400_000);
+  const lastSeen = lastEmail?.updatedAt ?? null;
+  const since = lastSeen && lastSeen < floor ? lastSeen : floor;
   const ctx = { since };
 
   // ── Coleta em chunks (controle de concorrência) ──────────────────────────

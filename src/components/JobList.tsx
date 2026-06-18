@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { JobCard } from "./JobCard";
-import { JobActions } from "@/app/JobActions";
 import {
   buildQuery, parseFilters, PAGE_SIZE, QUEUE_STATUS_LIST,
   type JobFilterState, type RawParams, type SortKey,
@@ -97,13 +96,9 @@ export async function JobList({ searchParams }: { searchParams: RawParams }) {
       <div className="filters-foot">
         <span className="count">Mostrando {start}–{end} de {total} vaga(s)</span>
       </div>
-      <div className="grid">
+      <div className="grid" aria-live="polite">
         {jobs.map((job) => (
-          <JobCard
-            key={job.id}
-            job={job}
-            actions={<JobActions id={job.id} score={job.score} lens={job.lens} />}
-          />
+          <JobCard key={job.id} job={job} />
         ))}
       </div>
       <Pager state={state} total={total} />

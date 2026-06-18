@@ -1,13 +1,51 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useOptimistic } from "react";
 import type { Job } from "@prisma/client";
 import {
   fmtScore, lensClass, lensLabel, relativeDate, scoreClass, sourceLabel,
 } from "@/app/view";
+import { JobActions } from "@/app/JobActions";
 
-export function JobCard({ job, actions }: { job: Job; actions?: ReactNode }) {
+// Rótulo curto do status para o pill (vale tanto p/ status real quanto otimista).
+const STATUS_LABEL: Record<string, string> = {
+  ACTIVE: "ACTIVE",
+  APPROVED: "Aprovado",
+  REJECTED: "Rejeitado",
+  GENERATING: "Gerando",
+  GENERATED: "GENERATED",
+  APPLIED: "Aplicada",
+  INACTIVE: "INACTIVE",
+};
+
+// Classe de opacidade do card por status otimista (instantâneo no clique).
+const DIM_CLASS: Record<string, string> = {
+  REJECTED: "card-rejecting",
+  APPROVED: "card-approving",
+  APPLIED: "card-approving", // reusa o esmaecimento 0.6 ao aplicar da fila
+};
+// Cor do pill de status por status otimista.
+const PILL_CLASS: Record<string, string> = {
+  REJECTED: "status-rejected",
+  APPROVED: "status-approved",
+  APPLIED: "status-approved", // badge verde "Aplicada" instantâneo
+};
+
+export function JobCard({ job }: { job: Job }) {
+  // Status otimista: muda na hora do clique (Rejeitar), sem esperar o servidor.
+  // Se a Server Action falhar (sem revalidatePath), o status base (job.status)
+  // volta a valer e o useOptimistic reverte sozinho ao fim da transition.
+  const [optimisticStatus, setOptimisticStatus] = useOptimistic(
+    job.status,
+    (_prev, next: string) => next,
+  );
+
   const applied = relativeDate(job.lastSeenAt);
+  const dimClass = DIM_CLASS[optimisticStatus] ?? "";
+  const pillClass = PILL_CLASS[optimisticStatus] ?? "";
+
   return (
-    <article className="card">
+    <article className={`card ${dimClass}`}>
       <div className="card-head">
         <div className="badges">
           <span
@@ -40,11 +78,21 @@ export function JobCard({ job, actions }: { job: Job; actions?: ReactNode }) {
         </details>
       )}
 
-      {actions}
+      <JobActions
+        id={job.id}
+        title={job.title}
+        company={job.company}
+        description={job.description}
+        score={job.score}
+        lens={job.lens}
+        onOptimisticStatus={setOptimisticStatus}
+      />
 
       <div className="card-foot">
         <span>{sourceLabel(job.source)}</span>
-        <span className="status-pill badge">{job.status}</span>
+        <span className={`status-pill badge ${pillClass}`} role="status">
+          {STATUS_LABEL[optimisticStatus] ?? optimisticStatus}
+        </span>
       </div>
     </article>
   );

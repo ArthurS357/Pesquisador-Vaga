@@ -79,6 +79,43 @@ O coletor (`engine.ts`) **só** promove uma vaga a `ACTIVE` se ela for nova ou e
 - **Sem Ollama no ar**: a geração detecta a indisponibilidade, reverte o status para `APPROVED` e mostra o erro no painel (nada fica preso em `GENERATING`).
 - Se a vaga não tiver `description` persistida, a prompt degrada graciosamente (foca em título + empresa + lens). Scraping da apply URL ficou fora de escopo (fragilidade por-ATS).
 
+## Ollama / aceleração GPU (RX 7600, 8 GB)
+
+O Ollama roda **nativo no Windows** (não no WSL2). A build 0.13+ já traz ROCm/Vulkan
+embutido e usa a **RX 7600** sem ROCm instalado à parte. O `localhost:11434` que o
+job-engine chama é o próprio Ollama do Windows.
+
+**Config crítica — contexto x VRAM.** O contexto default do qwen3 (32K) infla o KV cache
+para ~10 GB e estoura os 8 GB da placa, forçando um split CPU/GPU (~10 tok/s). Capando o
+contexto em **8192**, o modelo inteiro cabe (6.6 GB → **100% GPU**, ~33-41 tok/s):
+inferência cai de 60-120s para ~3-5s e a carta para ~10-15s.
+
+```powershell
+# Variável de ambiente do USUÁRIO (já configurada; vale para todos os modelos):
+setx OLLAMA_CONTEXT_LENGTH 8192
+```
+
+> Sem mexer no código: o cap é feito via env var do servidor, não em `llm-judge.ts`/`generator.ts`.
+
+**Comandos:**
+
+```bash
+npm run ollama:start    # sobe o Ollama com o contexto correto (idempotente)
+npm run ollama:status   # mostra modelos + onde o modelo carregado roda (deve dizer "100% GPU")
+```
+
+**Troubleshooting:**
+
+| Sintoma | Causa / Solução |
+|---|---|
+| `ollama ps` mostra `x%/y% CPU/GPU` | Contexto estourou a VRAM. Confirme `OLLAMA_CONTEXT_LENGTH=8192` e **reinicie o Ollama** (a var só é lida no launch). |
+| Inferência voltou a 60-120s | GPU não está sendo usada — quase sempre é o contexto. Rode `npm run ollama:status`. |
+| `Servidor: OFFLINE` | `npm run ollama:start`. |
+| Driver AMD desatualizado | Atualize o Adrenalin; a build atual (`32.0.31019+`) funciona. |
+
+> **WSL2 + ROCm não é necessário** e foi descartado: a RX 7600 é gfx1102, fora da lista
+> oficial de GPUs do ROCm, e o caminho via WSL não traria ganho sobre a config nativa acima.
+
 ## Regras técnicas
 
 - TypeScript strict. Nada de `any`. Server Actions retornam `ActionResult` (união discriminada `{ ok } | { ok; error }`).
