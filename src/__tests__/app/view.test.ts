@@ -12,10 +12,12 @@ import {
 describe("parseFilters", () => {
   it("aplica defaults para params vazios", () => {
     expect(parseFilters({})).toEqual({
+      q: "",
       sources: [],
       lenses: [],
       min: 0,
       sort: "score",
+      status: null,
       page: 1,
     });
   });
@@ -29,10 +31,12 @@ describe("parseFilters", () => {
       page: "3",
     });
     expect(result).toEqual({
+      q: "",
       sources: ["greenhouse", "lever"],
       lenses: ["backend"],
       min: 60,
       sort: "recent",
+      status: null,
       page: 3,
     });
   });
@@ -43,14 +47,27 @@ describe("parseFilters", () => {
     expect(result.sort).toBe("score"); // sort desconhecido cai no default
     expect(result.page).toBe(1); // page < 1 vira 1
   });
+
+  it("parseia busca textual (q) e facet de status válido", () => {
+    const r = parseFilters({ q: "  Backend Dev  ", status: "APPROVED" });
+    expect(r.q).toBe("Backend Dev");
+    expect(r.status).toBe("APPROVED");
+  });
+
+  it("ignora status fora da fila (só ACTIVE/APPROVED)", () => {
+    expect(parseFilters({ status: "REJECTED" }).status).toBeNull();
+    expect(parseFilters({ status: "lixo" }).status).toBeNull();
+  });
 });
 
 describe("buildQuery", () => {
   const base: JobFilterState = {
+    q: "",
     sources: [],
     lenses: [],
     min: 0,
     sort: "score",
+    status: null,
     page: 1,
   };
 
@@ -67,6 +84,10 @@ describe("buildQuery", () => {
   it("omite page=1 e sort=score por serem defaults", () => {
     expect(buildQuery(base, { page: 1, sort: "score" })).toBe("/");
     expect(buildQuery(base, { page: 2 })).toBe("/?page=2");
+  });
+
+  it("serializa q e status", () => {
+    expect(buildQuery(base, { q: "node", status: "ACTIVE" })).toBe("/?q=node&status=ACTIVE");
   });
 });
 
