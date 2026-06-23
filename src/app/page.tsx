@@ -11,7 +11,7 @@ import { OverviewHero, type OverviewMetrics } from "@/components/OverviewHero";
 import { collectorStatus } from "@/core/collector";
 import { HISTORY_STATUSES, JOB_STATUS } from "./status";
 import {
-  fmtScore, lensClass, lensLabel, parseFilters, QUEUE_STATUS_LIST, scoreClass,
+  fmtScore, lensClass, lensLabel, PAGE_SIZE, parseFilters, QUEUE_STATUS_LIST, scoreClass,
   type RawParams,
 } from "./view";
 
@@ -66,6 +66,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
     conversionPct: monitored > 0 ? Math.round((approved / monitored) * 100) : 0,
   };
 
+  // Rodapé de contagem da command bar — derivado dos counts já carregados
+  // (current.status == um facet → tabCounts daquele status; null → all),
+  // sem nenhuma query extra. Espelha o `total` que o JobList computa.
+  const viewTotal = (current.status ? tabCounts[current.status] : tabCounts.all) ?? 0;
+  const rangeEnd = Math.min(viewTotal, current.page * PAGE_SIZE);
+  const rangeStart = viewTotal === 0 ? 0 : Math.min((current.page - 1) * PAGE_SIZE + 1, rangeEnd);
+
   return (
     <main className="wrap">
       <header className="site-header">
@@ -75,9 +82,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
 
       <OverviewHero metrics={metrics} initialStatus={collectorStatus()} />
 
-      <JobFilters current={current} sources={sources} lenses={lenses} />
-
-      <StatusTabs current={current} counts={tabCounts} />
+      <section className="command-bar" aria-label="Navegação e filtros da fila">
+        <StatusTabs current={current} counts={tabCounts} />
+        <JobFilters current={current} sources={sources} lenses={lenses} />
+        {viewTotal > 0 && (
+          <div className="command-bar-foot">
+            Mostrando {rangeStart}–{rangeEnd} de {viewTotal} vaga(s)
+          </div>
+        )}
+      </section>
 
       <Suspense key={JSON.stringify(sp)} fallback={<JobGridSkeleton />}>
         <JobList searchParams={sp} />

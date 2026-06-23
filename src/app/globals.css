@@ -63,68 +63,180 @@ a:hover { text-decoration: underline; }
 
 h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
 
-/* ── Filtros ──────────────────────────────────────────── */
-.filters {
+/* ════════════════════════════════════════════════════════
+   Command Bar — navegação (abas) + filtros + rodapé, unificados
+   ════════════════════════════════════════════════════════ */
+.command-bar {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+  box-shadow: var(--shadow);
 }
-.filters > summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 0.75rem 1rem;
-  font-weight: 600;
-  font-size: 0.9rem;
-  user-select: none;
-}
-.filters > summary::-webkit-details-marker { display: none; }
-.filters-body {
+
+/* Linha mestra: abas de status atuam como navegação do bloco inteiro. */
+.command-bar > .tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem;
-  padding: 1rem;
-  border-top: 1px solid var(--border);
+  width: 100%;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0 0.6rem;
+  background: color-mix(in srgb, var(--surface-2) 35%, var(--surface));
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
 }
+.command-bar > .tabs .tab {
+  position: relative;
+  border-radius: 0;
+  padding: 0.7rem 1rem;
+}
+.command-bar > .tabs .tab-active {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+}
+.command-bar > .tabs .tab-active::after {
+  content: "";
+  position: absolute;
+  left: 0.8rem;
+  right: 0.8rem;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+
+/* Filtros: grid de 2 linhas balanceado (6 colunas). */
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+  padding: 1.1rem;
+  transition: opacity var(--t);
+}
+.filters-grid-pending { opacity: 0.6; }
+.filters-grid fieldset.field { border: 0; margin: 0; padding: 0; min-width: 0; }
+.filters-search { grid-column: span 4; }
+.field-fonte { grid-column: span 2; }
+.field-lens { grid-column: span 3; }
+.field-score { grid-column: span 2; }
+.field-sort { grid-column: span 1; }
+.filters-clear {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.35rem;
+}
+
+/* Rodapé sutil de contagem, ancorado na base da command bar. */
+.command-bar-foot {
+  padding: 0.55rem 1.1rem;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 35%, var(--surface));
+  font-size: 0.825rem;
+  color: var(--text-faint);
+}
+
+@media (max-width: 900px) {
+  .filters-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filters-search,
+  .field-fonte,
+  .field-lens { grid-column: 1 / -1; }
+  .field-score { grid-column: 1 / 2; }
+  .field-sort { grid-column: 2 / 3; }
+}
+@media (max-width: 520px) {
+  .filters-grid { grid-template-columns: 1fr; }
+  .field-score,
+  .field-sort { grid-column: 1 / -1; }
+}
+
 .field { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
 .field > .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); }
 .checks { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+/* Pílula de toggle: feedback puramente de superfície (sem radio dot).
+   Inativa = fantasma com borda sutil · Ativa = preenchida em accent. */
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.55rem;
-  background: var(--surface-2);
+  min-height: 34px;
+  padding: 0 0.85rem;
+  background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;
   font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-dim);
   cursor: pointer;
-  transition: border-color var(--t), background var(--t);
+  user-select: none;
+  transition: border-color var(--t), background var(--t), color var(--t);
 }
-.chip:hover { border-color: var(--border-strong); }
-.chip:has(input:checked) { border-color: var(--accent); color: var(--accent); }
-.chip input { accent-color: var(--accent); margin: 0; }
-.range-row { display: flex; align-items: center; gap: 0.6rem; }
-.range-row input[type="range"] { accent-color: var(--accent); width: 140px; }
-.range-val { font-variant-numeric: tabular-nums; min-width: 2.5ch; font-size: 0.85rem; }
+.chip:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-2); }
+.chip:has(input:checked) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #042f2a;
+  font-weight: 600;
+}
+.chip:has(input:checked):hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+/* Checkbox nativo escondido visualmente — o label (chip) é o controle. */
+.chip input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.chip:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.range-row { display: flex; align-items: center; min-height: 34px; }
+.range-row input[type="range"] {
+  accent-color: var(--accent);
+  width: 100%;
+  height: 1.1rem;
+  cursor: pointer;
+}
+/* Valor dinâmico embutido no próprio label (Score mínimo: NN). */
+.label-val { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
 .select, .input {
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius-sm);
-  padding: 0.35rem 0.5rem;
+  padding: 0.45rem 0.6rem;
   font: inherit;
   font-size: 0.85rem;
+  transition: border-color var(--t), box-shadow var(--t), background var(--t);
 }
-.filters-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+.select:hover, .input:hover { border-color: var(--border-strong); }
+.select:focus, .input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
-.count { color: var(--text-dim); font-size: 0.85rem; }
+.input::placeholder { color: var(--text-faint); }
+
+/* Select com a mesma altura e raio das pílulas + seta custom (sem o nativo). */
+.select {
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 0 2.1rem 0 0.95rem;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--surface-2);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238593a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  cursor: pointer;
+}
 
 /* ── Grid + cards ─────────────────────────────────────── */
 .grid {
@@ -371,11 +483,6 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
 .pager .page-info { color: var(--text-dim); font-size: 0.85rem; }
 .pager a[aria-disabled="true"] { opacity: 0.4; pointer-events: none; }
 
-@media (min-width: 721px) {
-  .filters > summary { display: none; }
-  .filters-body { border-top: none; }
-}
-
 /* ── Cleanup Panel ────────────────────────────────────── */
 .cleanup-panel {
   margin-top: 2.5rem;
@@ -525,8 +632,44 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
 .card-approved { border-left: 3px solid color-mix(in srgb, var(--score-high-fg) 55%, transparent); }
 
 /* ── Busca textual ────────────────────────────────────── */
-.filters-search { flex: 1 1 220px; min-width: 180px; }
-.filters-search .input { width: 100%; }
+.search-wrap { position: relative; display: flex; align-items: center; }
+.search-icon {
+  position: absolute;
+  left: 0.65rem;
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-faint);
+  pointer-events: none;
+  transition: color var(--t);
+}
+.search-wrap:focus-within .search-icon { color: var(--accent); }
+.search-input {
+  width: 100%;
+  min-height: 34px;
+  padding-left: 2.15rem;
+  padding-right: 2rem;
+  font-size: 0.9rem;
+}
+/* Remove o "✕" nativo do type=search — usamos o nosso. */
+.search-input::-webkit-search-cancel-button { display: none; }
+.search-clear {
+  position: absolute;
+  right: 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: color var(--t), background var(--t);
+}
+.search-clear:hover { color: var(--text); background: var(--surface-2); }
 
 /* ── Abas de status (segmented control) ───────────────── */
 .tabs {
