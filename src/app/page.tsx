@@ -7,6 +7,8 @@ import { JobList, queueFiltersWhere } from "@/components/JobList";
 import { JobGridSkeleton } from "@/components/JobCardSkeleton";
 import { StatusTabs } from "@/components/StatusTabs";
 import { CleanupPanel } from "@/components/CleanupPanel";
+import { OverviewHero, type OverviewMetrics } from "@/components/OverviewHero";
+import { collectorStatus } from "@/core/collector";
 import { HISTORY_STATUSES, JOB_STATUS } from "./status";
 import {
   fmtScore, lensClass, lensLabel, parseFilters, QUEUE_STATUS_LIST, scoreClass,
@@ -24,7 +26,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
   // Contagens por status respeitando os filtros atuais (menos o próprio status):
   // alimentam os badges das abas sem uma query extra por aba.
   const countWhere = { ...queueFiltersWhere(current), status: { in: QUEUE_STATUS_LIST } };
-  const [sourceRows, lensRows, history, statusGroups] = await Promise.all([
+  const [sourceRows, lensRows, history, statusGroups, allStatusGroups] = await Promise.all([
     prisma.job.findMany({ where: queueWhere, select: { source: true }, distinct: ["source"], orderBy: { source: "asc" } }),
     prisma.job.findMany({ where: { ...queueWhere, lens: { not: null } }, select: { lens: true }, distinct: ["lens"], orderBy: { lens: "asc" } }),
     prisma.job.findMany({
@@ -34,6 +36,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
       select: { id: true, score: true, lens: true, title: true, company: true, status: true },
     }),
     prisma.job.groupBy({ by: ["status"], where: countWhere, _count: { _all: true } }),
+    // Contagens globais (sem filtro) para os indicadores do painel de controle.
+    prisma.job.groupBy({ by: ["status"], _count: { _all: true } }),
   ]);
   const sources = sourceRows.map((r) => r.source);
   const lenses = lensRows.map((r) => r.lens).filter((l): l is string => l !== null);
@@ -44,12 +48,32 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
     [JOB_STATUS.APPROVED]: countOf(JOB_STATUS.APPROVED),
   };
 
+  // ── Indicadores do painel de controle (sobre o banco inteiro) ───────────────
+  const globalCountOf = (st: string) => allStatusGroups.find((g) => g.status === st)?._count._all ?? 0;
+  const totalAll = allStatusGroups.reduce((n, g) => n + g._count._all, 0);
+  const monitored = totalAll - globalCountOf(JOB_STATUS.INACTIVE); // vivas (menos expiradas)
+  // "Aprovadas" = tudo que passou pela curadoria humana (APPROVED em diante).
+  const approved =
+    globalCountOf(JOB_STATUS.APPROVED) +
+    globalCountOf(JOB_STATUS.GENERATING) +
+    globalCountOf(JOB_STATUS.GENERATED) +
+    globalCountOf(JOB_STATUS.APPLIED);
+  const metrics: OverviewMetrics = {
+    monitored,
+    totalAll,
+    active: globalCountOf(JOB_STATUS.ACTIVE),
+    approved,
+    conversionPct: monitored > 0 ? Math.round((approved / monitored) * 100) : 0,
+  };
+
   return (
     <main className="wrap">
       <header className="site-header">
         <h1>Job Engine — Curadoria</h1>
         <span className="sub">fila ranqueada · curadoria human-in-the-loop</span>
       </header>
+
+      <OverviewHero metrics={metrics} initialStatus={collectorStatus()} />
 
       <JobFilters current={current} sources={sources} lenses={lenses} />
 

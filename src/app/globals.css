@@ -604,3 +604,60 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
   .tabs { display: flex; width: 100%; }
   .tab { flex: 1; justify-content: center; }
 }
+
+/* ── Painel de Controle de Missão (hero / bento) ──────── */
+/* Espaçamento contido: não empurra a fila para fora da tela (mb + gap limpos). */
+.hero { margin-bottom: 1.5rem; }
+.hero-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap);
+}
+@media (max-width: 880px) { .hero-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 460px) { .hero-grid { grid-template-columns: 1fr; } }
+
+.hero-card { gap: 0.3rem; justify-content: flex-start; }
+.hero-card:hover { transform: none; } /* indicadores são estáticos: sem lift */
+.hero-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.hero-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.hero-accent { color: var(--accent); }
+.hero-sub { font-size: 0.78rem; color: var(--text-dim); }
+
+/* Card de comando — destaque sutil de accent para separar do resto. */
+.hero-cmd {
+  justify-content: space-between;
+  gap: 0.7rem;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--surface)), var(--surface));
+}
+.hero-cmd:hover {
+  transform: none;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.hero-cmd-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.hero-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.hero-status-idle { color: var(--score-high-fg); }
+.hero-status-running { color: var(--score-mid-fg); }
+.hero-run-btn { width: 100%; justify-content: center; margin-top: auto; }
