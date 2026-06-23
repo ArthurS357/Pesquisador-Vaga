@@ -105,7 +105,7 @@ describe("parseLinkedInJobAlert", () => {
       description: null,
       updatedAt: date,
     });
-    expect(jobs[0].applyUrl).toContain("/jobs/view/4416927632");
+    expect(jobs[0]!.applyUrl).toContain("/jobs/view/4416927632");
     expect(jobs[1]).toMatchObject({
       title: "Software Engineer - Mercado Envios",
       company: "Mercado Livre",
@@ -133,15 +133,15 @@ describe("parseLinkedInJobAlert", () => {
       </td></tr></table>`;
     const jobs = parseLinkedInJobAlert(html, date);
     expect(jobs).toHaveLength(1);
-    expect(jobs[0].location).toBeNull();
-    expect(jobs[0].company).toBe("LinkedIn");
+    expect(jobs[0]!.location).toBeNull();
+    expect(jobs[0]!.company).toBe("LinkedIn");
   });
 
   it("gera sourceId determinístico a partir de company+title+location", () => {
     const a = parseLinkedInJobAlert(linkedInHtml, date);
     const b = parseLinkedInJobAlert(linkedInHtml, new Date("2026-07-01T00:00:00Z"));
     // Mesma vaga em e-mails diferentes (datas/tracking diferentes) → mesmo sourceId.
-    expect(a[0].sourceId).toBe(b[0].sourceId);
+    expect(a[0]!.sourceId).toBe(b[0]!.sourceId);
   });
 });
 
@@ -193,7 +193,7 @@ describe("parseGenericJobEmail", () => {
       date
     );
     expect(jobs).toHaveLength(1);
-    expect(jobs[0].company).toBe("Acme");
+    expect(jobs[0]!.company).toBe("Acme");
   });
 });
 
