@@ -143,7 +143,11 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
   box-shadow: var(--shadow);
   transition: border-color var(--t), transform var(--t), box-shadow var(--t), opacity 200ms ease;
 }
-.card:hover { border-color: var(--border-strong); transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+.card:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
 
 /* ── Optimistic UI (curadoria em lote) ────────────────── */
 /* Status otimista no clique: card escurece antes do servidor responder. */
@@ -225,7 +229,7 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
   transition: border-color var(--t), background var(--t), transform var(--t);
 }
 .btn:hover:not(:disabled) { border-color: var(--border-strong); background: #232a38; }
-.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--accent-strong); border-color: var(--accent-strong); color: #042f2a; font-weight: 600; }
 .btn-primary:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
@@ -344,6 +348,7 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   .sk { animation: none; }
   .card { transition: none; }
+  .grid > .card { animation: none; }
 }
 
 /* ── Histórico ────────────────────────────────────────── */
@@ -508,3 +513,95 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
   line-height: 1.5;
 }
 .char-count { display: block; margin: 0.3rem 0 0.25rem; }
+
+/* ════════════════════════════════════════════════════════
+   Redesign "Linear" — abas, busca, entrada escalonada, perf
+   ════════════════════════════════════════════════════════ */
+
+/* Perf local: navegador pula layout/paint de cards fora da viewport.
+   `auto 280px` = lembra o tamanho real após 1ª pintura; 280px é o fallback. */
+.card { content-visibility: auto; contain-intrinsic-size: auto 280px; }
+
+/* Agrupamento visual: vagas APPROVED ganham trilho-accent verde à esquerda. */
+.card-approved { border-left: 3px solid color-mix(in srgb, var(--score-high-fg) 55%, transparent); }
+
+/* ── Busca textual ────────────────────────────────────── */
+.filters-search { flex: 1 1 220px; min-width: 180px; }
+.filters-search .input { width: 100%; }
+
+/* ── Abas de status (segmented control) ───────────────── */
+.tabs {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  margin-bottom: 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transition: opacity var(--t);
+}
+.tabs-pending { opacity: 0.55; }
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.85rem;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--t), background var(--t), transform var(--t);
+}
+.tab:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
+.tab:active:not(:disabled) { transform: scale(0.96); }
+.tab:disabled { cursor: default; }
+.tab-active {
+  color: var(--text);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.2rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tab-active .tab-count { background: var(--accent-strong); color: #042f2a; }
+
+/* ── Entrada escalonada da lista (staggered fade-in) ──── */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.grid > .card { animation: card-in 220ms ease both; }
+.grid > .card:nth-child(1)    { animation-delay: 0ms; }
+.grid > .card:nth-child(2)    { animation-delay: 25ms; }
+.grid > .card:nth-child(3)    { animation-delay: 50ms; }
+.grid > .card:nth-child(4)    { animation-delay: 75ms; }
+.grid > .card:nth-child(5)    { animation-delay: 100ms; }
+.grid > .card:nth-child(6)    { animation-delay: 125ms; }
+.grid > .card:nth-child(7)    { animation-delay: 150ms; }
+.grid > .card:nth-child(8)    { animation-delay: 175ms; }
+.grid > .card:nth-child(9)    { animation-delay: 200ms; }
+.grid > .card:nth-child(n+10) { animation-delay: 220ms; }
+
+/* ── Histórico: feedback de hover ─────────────────────── */
+.hist-row { transition: border-color var(--t), background var(--t); }
+.hist-row:hover { border-color: var(--border-strong); background: var(--surface-2); }
+
+@media (max-width: 520px) {
+  .tabs { display: flex; width: 100%; }
+  .tab { flex: 1; justify-content: center; }
+}

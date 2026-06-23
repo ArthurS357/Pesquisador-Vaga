@@ -5,6 +5,7 @@ import type { Job } from "@prisma/client";
 import {
   fmtScore, lensClass, lensLabel, relativeDate, scoreClass, sourceLabel,
 } from "@/app/view";
+import { JOB_STATUS } from "@/app/status";
 import { JobActions } from "@/app/JobActions";
 
 // Rótulo curto do status para o pill (vale tanto p/ status real quanto otimista).
@@ -43,9 +44,11 @@ export function JobCard({ job }: { job: Job }) {
   const applied = relativeDate(job.lastSeenAt);
   const dimClass = DIM_CLASS[optimisticStatus] ?? "";
   const pillClass = PILL_CLASS[optimisticStatus] ?? "";
+  // Trilho-accent à esquerda nas vagas já aprovadas (agrupamento visual da fila).
+  const accentClass = optimisticStatus === JOB_STATUS.APPROVED ? "card-approved" : "";
 
   return (
-    <article className={`card ${dimClass}`}>
+    <article className={`card ${dimClass} ${accentClass}`}>
       <div className="card-head">
         <div className="badges">
           <span
