@@ -96,14 +96,8 @@ export async function JobList({ searchParams }: { searchParams: RawParams }) {
   if (totalInDb === 0) return <EmptyDb />;
   if (total === 0) return <EmptyFiltered />;
 
-  const start = (state.page - 1) * PAGE_SIZE + 1;
-  const end = start + jobs.length - 1;
-
   return (
     <>
-      <div className="filters-foot">
-        <span className="count">Mostrando {start}–{end} de {total} vaga(s)</span>
-      </div>
       <div className="grid" aria-live="polite">
         {jobs.map((job) => (
           <JobCard key={job.id} job={job} />
