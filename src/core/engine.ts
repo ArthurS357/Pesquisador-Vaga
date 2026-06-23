@@ -36,6 +36,7 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     for (let j = 0; j < results.length; j++) {
       const r = results[j];
       const adapter = chunk[j];
+      if (!r || !adapter) continue; // j < results.length: nunca undefined em runtime; narrowing p/ o compilador
       if (r.status === "fulfilled") {
         console.log(`📥 Adapter "${adapter.name}" retornou ${r.value.length} vaga(s)`);
         all.push(...r.value);
