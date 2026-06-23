@@ -112,7 +112,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
                     <span className="title">{job.title}</span>
                     <span className="meta"> · {job.company}</span>
                   </span>
-                  <span className="status-pill badge">{job.status}</span>
+                  {/* Smoke test Tailwind: pílula de status via tokens-ponte
+                      (bg-surface-2 / border-border / text-muted-foreground). */}
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-border bg-surface-2 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                    {job.status}
+                  </span>
                   {hasArtifact && <Link href={`/job/${job.id}/artifact`}>Ler carta</Link>}
                   {job.status === JOB_STATUS.GENERATED && <MarkAppliedButton id={job.id} />}
                 </div>

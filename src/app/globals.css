@@ -1,3 +1,9 @@
+/* Tailwind v3 — diretivas aditivas (Preflight desligado no config: não reseta
+   o CSS legado abaixo). Coexistência pacífica. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --bg: #0d1117;
   --surface: #161b22;
