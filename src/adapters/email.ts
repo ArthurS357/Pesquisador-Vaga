@@ -43,7 +43,7 @@ export function parseLinkedInJobAlert(html: string, date: Date): Job[] {
 
     // Agrupa por id da vaga — cada vaga só deve render uma vez.
     const idMatch = link.match(/\/jobs\/view\/(\d+)/);
-    const id = idMatch ? idMatch[1] : link;
+    const id = idMatch?.[1] ?? link;
     if (seen.has(id)) return;
     seen.add(id);
 
@@ -92,7 +92,7 @@ export const parseGupyAlert: EmailParser = (html, subject, date) => {
     if (!link || !/\.gupy\.io\/jobs?\//i.test(link)) return;
 
     const companyMatch = link.match(/https?:\/\/([^.]+)\.gupy\.io/);
-    const company = companyMatch ? companyMatch[1] : "Gupy";
+    const company = companyMatch?.[1] ?? "Gupy";
 
     jobs.push({
       source: "gupy-email",
@@ -135,7 +135,7 @@ export function isInfoJobsJunkTitle(title: string): boolean {
 // Id base da vaga: "__11716514.aspx" → "11716514". Agrupa anchors da mesma vaga.
 export function infoJobsJobId(url: string): string | null {
   const m = url.match(/__(\d+)/) ?? url.match(/(\d{6,})\.aspx/i);
-  return m ? m[1] : null;
+  return m?.[1] ?? null;
 }
 
 // Prefere título com código+cargo ("11429998 - Técnico...") > com código > qualquer.
@@ -147,9 +147,9 @@ function infoJobsTitleScore(title: string): number {
 
 export function extractInfoJobsCompany(parentText: string): string | null {
   const named = parentText.match(/A empresa\s+(.+?)\s+est[áa]\s+selecionando/i);
-  if (named) return named[1].trim();
+  if (named) return named[1]?.trim() ?? null;
   const fallback = parentText.match(/^([^\n\r|–\-]{2,50})/);
-  return fallback ? fallback[1].trim() : null;
+  return fallback?.[1]?.trim() ?? null;
 }
 
 // InfoJobs envia alertas de emprego com links contendo /vagas/ ou formato
@@ -224,7 +224,7 @@ export const parseVagasComAlert: EmailParser = (html, _subject, date) => {
 
     const parentText = $(el).closest("td, div, li").text().replace(text, "").trim();
     const companyMatch = parentText.match(/^([^\n\r|–\-]{2,50})/);
-    const company = companyMatch ? companyMatch[1].trim() : "Vagas.com";
+    const company = companyMatch?.[1]?.trim() ?? "Vagas.com";
 
     jobs.push({
       source: "vagascom-email",
@@ -255,9 +255,9 @@ function cleanSubjectToTitle(subject: string): string {
 
 // "victória neves [ zallpy ]" <e@x> → "Zallpy". Prefere conteúdo entre [ ]/( ).
 function companyFromSender(from: string): string {
-  const namePart = from.split("<")[0].replace(/"/g, "").trim();
+  const namePart = (from.split("<")[0] ?? "").replace(/"/g, "").trim();
   const bracket = namePart.match(/[[(]\s*([^\])]+?)\s*[\])]/);
-  const raw = (bracket ? bracket[1] : namePart).replace(/["[\]()]/g, "").trim();
+  const raw = (bracket?.[1] ?? namePart).replace(/["[\]()]/g, "").trim();
   if (!raw) return "";
   // Já tem maiúscula (ex.: "UMC") → preserva. Tudo minúsculo → Title Case.
   return /[A-Z]/.test(raw) ? raw : raw.replace(/\b\w/g, (c) => c.toUpperCase());
