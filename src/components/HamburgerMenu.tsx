@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /** Uma ação do menu. `separatorBefore` injeta um <hr> acima do item. */
 export interface MenuAction {
@@ -31,12 +32,17 @@ export function HamburgerMenu({ actions, label, disabled = false }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Ref para o nó portado — necessário para o click-outside não fechar ao
+  // clicar dentro do dropdown (que agora vive em <body>, fora de rootRef).
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fecha ao clicar fora do menu (evita overlays zumbis).
   useEffect(() => {
     if (!open) return;
     function onDocPointer(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const inRoot = rootRef.current?.contains(e.target as Node);
+      const inPortal = dropdownRef.current?.contains(e.target as Node);
+      if (!inRoot && !inPortal) setOpen(false);
     }
     document.addEventListener("mousedown", onDocPointer);
     return () => document.removeEventListener("mousedown", onDocPointer);
@@ -98,6 +104,68 @@ export function HamburgerMenu({ actions, label, disabled = false }: Props) {
     }
   }
 
+  // Posição do dropdown: calculada a partir do gatilho para funcionar no portal.
+  const [dropPos, setDropPos] = useState({ top: 0, right: 0 });
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+
+    function recalc() {
+      if (!triggerRef.current) return;
+      const r = triggerRef.current.getBoundingClientRect();
+      setDropPos({
+        top: r.bottom + window.scrollY + 4,
+        right: window.innerWidth - r.right,
+      });
+    }
+
+    recalc();
+    window.addEventListener("scroll", recalc, { passive: true, capture: true });
+    window.addEventListener("resize", recalc);
+    return () => {
+      window.removeEventListener("scroll", recalc, { capture: true });
+      window.removeEventListener("resize", recalc);
+    };
+  }, [open]);
+
+  const dropdown = open ? (
+    <div
+      ref={dropdownRef}
+      className="hamburger-dropdown"
+      role="menu"
+      aria-label={label}
+      onKeyDown={onMenuKeyDown}
+      style={{
+        position: "absolute",
+        top: dropPos.top,
+        right: dropPos.right,
+        zIndex: 9990,
+      }}
+    >
+      {actions.map((a, idx) => (
+        <Fragment key={a.key}>
+          {a.separatorBefore && <hr className="hamburger-sep" role="separator" aria-hidden="true" />}
+          <button
+            ref={(el) => {
+              itemRefs.current[idx] = el;
+            }}
+            type="button"
+            role="menuitem"
+            className={`hamburger-item${a.variant === "danger" ? " hamburger-item-danger" : ""}`}
+            disabled={a.disabled}
+            onClick={() => {
+              setOpen(false);
+              a.onSelect();
+            }}
+          >
+            <span className="hamburger-item-icon" aria-hidden="true">{a.icon}</span>
+            {a.label}
+          </button>
+        </Fragment>
+      ))}
+    </div>
+  ) : null;
+
   return (
     <div className="hamburger-menu" ref={rootRef}>
       <button
@@ -119,31 +187,9 @@ export function HamburgerMenu({ actions, label, disabled = false }: Props) {
         ⋯
       </button>
 
-      {open && (
-        <div className="hamburger-dropdown" role="menu" aria-label={label} onKeyDown={onMenuKeyDown}>
-          {actions.map((a, idx) => (
-            <Fragment key={a.key}>
-              {a.separatorBefore && <hr className="hamburger-sep" role="separator" aria-hidden="true" />}
-              <button
-                ref={(el) => {
-                  itemRefs.current[idx] = el;
-                }}
-                type="button"
-                role="menuitem"
-                className={`hamburger-item${a.variant === "danger" ? " hamburger-item-danger" : ""}`}
-                disabled={a.disabled}
-                onClick={() => {
-                  setOpen(false);
-                  a.onSelect();
-                }}
-              >
-                <span className="hamburger-item-icon" aria-hidden="true">{a.icon}</span>
-                {a.label}
-              </button>
-            </Fragment>
-          ))}
-        </div>
-      )}
+      {/* Portal: renderiza o dropdown diretamente no <body>, escapando de
+          qualquer stacking context do card (content-visibility, transform…). */}
+      {typeof document !== "undefined" && createPortal(dropdown, document.body)}
     </div>
   );
 }
