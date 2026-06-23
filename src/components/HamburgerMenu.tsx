@@ -48,10 +48,12 @@ export function HamburgerMenu({ actions, label, disabled = false }: Props) {
     return () => document.removeEventListener("mousedown", onDocPointer);
   }, [open]);
 
-  // Ao abrir, foca o primeiro item habilitado.
+  // Ao abrir, foca o primeiro item habilitado. `preventScroll` impede o browser
+  // de rolar a página para trazer o item portado (em <body>) à vista — era a
+  // origem do "pulo" de scroll ao abrir o menu.
   useEffect(() => {
     if (!open) return;
-    itemRefs.current.find((el) => el && !el.disabled)?.focus();
+    itemRefs.current.find((el) => el && !el.disabled)?.focus({ preventScroll: true });
   }, [open]);
 
   function close(restoreFocus = true): void {
@@ -176,7 +178,13 @@ export function HamburgerMenu({ actions, label, disabled = false }: Props) {
         aria-expanded={open}
         aria-label={label}
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          // Isola o gatilho: barra o default e o bubbling para qualquer
+          // handler/efeito de scroll do card pai.
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
