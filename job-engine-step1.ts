@@ -94,6 +94,7 @@ async function collect(adapters: JobAdapter[], concurrency = 3): Promise<Job[]> 
     for (let j = 0; j < results.length; j++) {
       const r = results[j];
       const adapter = chunk[j];
+      if (!r || !adapter) continue; // narrowing p/ noUncheckedIndexedAccess; runtime nunca undefined
       if (r.status === "fulfilled") {
         all.push(...r.value);
       } else {
