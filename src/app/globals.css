@@ -244,9 +244,8 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
 .msg-error { font-size: 0.75rem; color: var(--danger); }
 
 /* ── Menu hamburguer (ações do card) ──────────────────── */
+/* O dropdown é renderizado via Portal no <body> — z-index via :has desnecessário. */
 .hamburger-menu { position: relative; align-self: flex-end; }
-/* O card que tem o dropdown aberto fica acima dos vizinhos do grid. */
-.card:has(.hamburger-dropdown) { position: relative; z-index: 20; }
 
 .hamburger-trigger {
   display: inline-flex;
