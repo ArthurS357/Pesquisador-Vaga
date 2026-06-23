@@ -3,8 +3,9 @@ import Link from "next/link";
 import { prisma } from "@/db/prisma";
 import { MarkAppliedButton } from "./HistoryActions";
 import { JobFilters } from "@/components/JobFilters";
-import { JobList } from "@/components/JobList";
+import { JobList, queueFiltersWhere } from "@/components/JobList";
 import { JobGridSkeleton } from "@/components/JobCardSkeleton";
+import { StatusTabs } from "@/components/StatusTabs";
 import { CleanupPanel } from "@/components/CleanupPanel";
 import { HISTORY_STATUSES, JOB_STATUS } from "./status";
 import {
@@ -20,7 +21,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
   const current = parseFilters(sp);
 
   const queueWhere = { status: { in: QUEUE_STATUS_LIST } };
-  const [sourceRows, lensRows, history] = await Promise.all([
+  // Contagens por status respeitando os filtros atuais (menos o próprio status):
+  // alimentam os badges das abas sem uma query extra por aba.
+  const countWhere = { ...queueFiltersWhere(current), status: { in: QUEUE_STATUS_LIST } };
+  const [sourceRows, lensRows, history, statusGroups] = await Promise.all([
     prisma.job.findMany({ where: queueWhere, select: { source: true }, distinct: ["source"], orderBy: { source: "asc" } }),
     prisma.job.findMany({ where: { ...queueWhere, lens: { not: null } }, select: { lens: true }, distinct: ["lens"], orderBy: { lens: "asc" } }),
     prisma.job.findMany({
@@ -29,9 +33,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
       take: 100,
       select: { id: true, score: true, lens: true, title: true, company: true, status: true },
     }),
+    prisma.job.groupBy({ by: ["status"], where: countWhere, _count: { _all: true } }),
   ]);
   const sources = sourceRows.map((r) => r.source);
   const lenses = lensRows.map((r) => r.lens).filter((l): l is string => l !== null);
+  const countOf = (st: string) => statusGroups.find((g) => g.status === st)?._count._all ?? 0;
+  const tabCounts: Record<string, number> = {
+    all: statusGroups.reduce((n, g) => n + g._count._all, 0),
+    [JOB_STATUS.ACTIVE]: countOf(JOB_STATUS.ACTIVE),
+    [JOB_STATUS.APPROVED]: countOf(JOB_STATUS.APPROVED),
+  };
 
   return (
     <main className="wrap">
@@ -41,6 +52,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
       </header>
 
       <JobFilters current={current} sources={sources} lenses={lenses} />
+
+      <StatusTabs current={current} counts={tabCounts} />
 
       <Suspense key={JSON.stringify(sp)} fallback={<JobGridSkeleton />}>
         <JobList searchParams={sp} />

@@ -22,6 +22,9 @@ export function JobFilters({ current, sources, lenses }: Props) {
   // useState não re-inicializa com a nova prop sozinho.
   useEffect(() => setMin(current.min), [current.min]);
 
+  const [q, setQ] = useState(current.q);
+  useEffect(() => setQ(current.q), [current.q]);
+
   // Toda mudança de filtro reseta a página e sobe a lista suavemente.
   function commit(override: Partial<JobFilterState>): void {
     const url = buildQuery(current, { page: 1, ...override });
@@ -32,18 +35,38 @@ export function JobFilters({ current, sources, lenses }: Props) {
     });
   }
 
+  // Busca por título: debounce 200ms — digitar não dispara navegação a cada tecla.
+  useEffect(() => {
+    if (q === current.q) return;
+    const t = setTimeout(() => commit({ q }), 200);
+    return () => clearTimeout(t);
+  }, [q, current.q]);
+
   function toggle(list: string[], value: string): string[] {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
   }
 
   const dirty =
-    current.sources.length > 0 || current.lenses.length > 0 ||
-    current.min > 0 || current.sort !== "score";
+    current.q !== "" || current.sources.length > 0 || current.lenses.length > 0 ||
+    current.min > 0 || current.sort !== "score" || current.status !== null;
 
   return (
     <details className="filters" open>
       <summary aria-label="Abrir filtros">Filtros{pending ? " · atualizando…" : ""}</summary>
       <div className="filters-body">
+        <div className="field filters-search">
+          <label className="label" htmlFor="q-search">Buscar</label>
+          <input
+            id="q-search"
+            className="input"
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="título da vaga…"
+            aria-label="Buscar vaga por título"
+          />
+        </div>
+
         <fieldset className="field" style={{ border: 0, margin: 0, padding: 0 }}>
           <legend className="label">Fonte</legend>
           <div className="checks">
@@ -115,7 +138,7 @@ export function JobFilters({ current, sources, lenses }: Props) {
             <button
               type="button"
               className="btn btn-link"
-              onClick={() => { setMin(0); commit({ sources: [], lenses: [], min: 0, sort: "score" }); }}
+              onClick={() => { setMin(0); setQ(""); commit({ q: "", sources: [], lenses: [], min: 0, sort: "score", status: null }); }}
             >
               Limpar filtros
             </button>

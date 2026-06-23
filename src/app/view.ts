@@ -14,10 +14,12 @@ const SORT_KEYS = SORT_OPTIONS.map((o) => o.value);
 export const PAGE_SIZE = 50;
 
 export interface JobFilterState {
+  q: string;
   sources: string[];
   lenses: string[];
   min: number;
   sort: SortKey;
+  status: string | null; // facet das abas: null = fila inteira (ACTIVE+APPROVED)
   page: number;
 }
 
@@ -40,16 +42,22 @@ export function parseFilters(sp: RawParams): JobFilterState {
   const sort: SortKey = sortRaw && SORT_KEYS.includes(sortRaw) ? sortRaw : "score";
   const pageRaw = Number(pick(sp.page));
   const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1;
-  return { sources: toArr(sp.sources), lenses: toArr(sp.lenses), min, sort, page };
+  const q = (pick(sp.q) ?? "").trim().slice(0, 100);
+  const statusRaw = pick(sp.status);
+  const status =
+    statusRaw && (QUEUE_STATUSES as readonly string[]).includes(statusRaw) ? statusRaw : null;
+  return { q, sources: toArr(sp.sources), lenses: toArr(sp.lenses), min, sort, status, page };
 }
 
 export function buildQuery(s: JobFilterState, override: Partial<JobFilterState> = {}): string {
   const m: JobFilterState = { ...s, ...override };
   const p = new URLSearchParams();
+  if (m.q) p.set("q", m.q);
   if (m.sources.length) p.set("sources", m.sources.join(","));
   if (m.lenses.length) p.set("lenses", m.lenses.join(","));
   if (m.min > 0) p.set("min", String(m.min));
   if (m.sort !== "score") p.set("sort", m.sort);
+  if (m.status) p.set("status", m.status);
   if (m.page > 1) p.set("page", String(m.page));
   const qs = p.toString();
   return qs ? `/?${qs}` : "/";
