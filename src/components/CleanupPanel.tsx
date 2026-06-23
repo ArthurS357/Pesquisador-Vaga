@@ -86,7 +86,8 @@ function ConfirmModal({ count, label, onConfirm, onCancel, busy }: ConfirmModalP
 
   useEffect(() => {
     dialogRef.current?.showModal();
-    return () => dialogRef.current?.close();
+    // .close() em <dialog> já fechado (ex.: Escape) lança DOMException no Chrome.
+    return () => { if (dialogRef.current?.open) dialogRef.current.close(); };
   }, []);
 
   return (
@@ -195,6 +196,9 @@ export function CleanupPanel() {
   const showToast = useCallback((msg: string, type: ToastState["type"]) => {
     setToast({ msg, type });
   }, []);
+
+  // Estável: evita que o Toast reinicie o timer de auto-dismiss a cada re-render.
+  const closeToast = useCallback(() => setToast(null), []);
 
   const requestClean = useCallback(
     (action: CleanupAction, label: string, count: number) => {
@@ -364,7 +368,7 @@ export function CleanupPanel() {
       )}
 
       {/* Toast */}
-      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
+      {toast && <Toast toast={toast} onClose={closeToast} />}
     </section>
   );
 }

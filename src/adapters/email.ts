@@ -1,5 +1,5 @@
 import { Job, JobAdapter, AdapterContext } from "../core/types";
-import { fetchWithTimeout, hashSourceId, resolveTrackingUrl } from "../core/utils";
+import { hashSourceId, resolveTrackingUrl } from "../core/utils";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import * as cheerio from "cheerio";
@@ -473,7 +473,6 @@ export function emailAlertAdapter(config: { host: string; port: number; user: st
         await client.logout();
       }
 
-      console.log('📦 Vagas extraídas (brutas):', JSON.stringify(jobs, null, 2));
       return jobs;
     }
   };

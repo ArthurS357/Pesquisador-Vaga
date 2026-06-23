@@ -28,5 +28,10 @@ model Job {
   @@unique([source, sourceId])
   @@index([company])
   @@index([canonicalHash])
-  @@index([status])
+  // Fila ranqueada: WHERE status IN (...) ORDER BY score DESC (page.tsx/JobList).
+  // O prefixo `status` também serve queries que filtram só por status.
+  @@index([status, score])
+  // Histórico/soft-delete: ORDER BY lastSeenAt DESC e
+  // updateMany(WHERE status=ACTIVE AND lastSeenAt < runStart) no engine.
+  @@index([status, lastSeenAt])
 }
