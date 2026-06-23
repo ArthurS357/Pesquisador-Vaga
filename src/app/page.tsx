@@ -23,7 +23,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
   const [sourceRows, lensRows, history] = await Promise.all([
     prisma.job.findMany({ where: queueWhere, select: { source: true }, distinct: ["source"], orderBy: { source: "asc" } }),
     prisma.job.findMany({ where: { ...queueWhere, lens: { not: null } }, select: { lens: true }, distinct: ["lens"], orderBy: { lens: "asc" } }),
-    prisma.job.findMany({ where: { status: { in: [...HISTORY_STATUSES] } }, orderBy: { lastSeenAt: "desc" }, take: 100 }),
+    prisma.job.findMany({
+      where: { status: { in: [...HISTORY_STATUSES] } },
+      orderBy: { lastSeenAt: "desc" },
+      take: 100,
+      select: { id: true, score: true, lens: true, title: true, company: true, status: true },
+    }),
   ]);
   const sources = sourceRows.map((r) => r.source);
   const lenses = lensRows.map((r) => r.lens).filter((l): l is string => l !== null);

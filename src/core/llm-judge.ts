@@ -1,8 +1,6 @@
-import { fetchWithTimeout } from "./utils";
 import { loadProfile } from "../utils/profile";
+import { ollamaGenerate } from "./ollama";
 
-const OLLAMA_URL = "http://localhost:11434/api/generate";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:8b";
 // qwen3:8b em GPU (RX 7600, contexto 8192 → 100% VRAM) responde em ~3-5s.
 // Timeout curto detecta falha de GPU/servidor cedo (em CPU levaria 60-120s).
 const LLM_TIMEOUT_MS = 30_000;
@@ -81,60 +79,27 @@ export async function judgeWithLlm(
   description: string
 ): Promise<LlmJudgeResult | null> {
   const prompt = buildPrompt(title, company, description);
-  console.info(`  [LLM] 📤 Enviando prompt para ${OLLAMA_MODEL} (~${prompt.length} chars)...`);
 
-  const t0 = Date.now();
-  try {
-    const res = await fetchWithTimeout(
-      OLLAMA_URL,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt,
-          format: "json",
-          stream: false,
-          options: { temperature: 0.1, num_predict: 512 },
-        }),
-      },
-      LLM_TIMEOUT_MS
-    );
-
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    console.info(`  [LLM] 📥 Resposta recebida em ${elapsed}s (HTTP ${res.status})`);
-
-    if (!res.ok) {
-      console.warn(`  [LLM] ❌ Ollama retornou HTTP ${res.status}. Usando fallback heurístico.`);
-      return null;
-    }
-
-    const body = (await res.json()) as { response?: string };
-    if (!body.response) {
-      console.warn(`  [LLM] ❌ Resposta vazia (campo 'response' ausente). Usando fallback heurístico.`);
-      return null;
-    }
-
-    console.info(`  [LLM] 📦 Corpo (${body.response.length} chars): ${body.response.slice(0, 120)}`);
-
-    const result = safeParseJson(body.response);
-    if (!result) {
-      console.warn(`  [LLM] ❌ Falha ao parsear JSON: ${body.response.slice(0, 200)}`);
-      return null;
-    }
-
-    console.info(`  [LLM] ✅ score=${result.score}, lens=${result.lens} — ${result.reasoning.slice(0, 80)}`);
-    return result;
-  } catch (err) {
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    const msg = err instanceof Error ? err.message : String(err);
-    if (err instanceof Error && err.name === "AbortError") {
-      console.warn(`  [LLM] ❌ Timeout após ${elapsed}s (limite: ${LLM_TIMEOUT_MS / 1000}s). Usando fallback heurístico.`);
-    } else if (msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
-      console.warn(`  [LLM] ❌ Ollama offline (conexão recusada). Usando fallback heurístico.`);
-    } else {
-      console.warn(`  [LLM] ❌ Erro de rede: ${msg}. Usando fallback heurístico.`);
-    }
+  const response = await ollamaGenerate({
+    prompt,
+    format: "json",
+    options: { temperature: 0.1, num_predict: 512 },
+    timeoutMs: LLM_TIMEOUT_MS,
+    label: "LLM",
+  });
+  if (!response) {
+    console.warn(`  [LLM] ↩ Sem resposta do Ollama. Usando fallback heurístico.`);
     return null;
   }
+
+  console.info(`  [LLM] 📦 Corpo (${response.length} chars): ${response.slice(0, 120)}`);
+
+  const result = safeParseJson(response);
+  if (!result) {
+    console.warn(`  [LLM] ❌ Falha ao parsear JSON: ${response.slice(0, 200)}`);
+    return null;
+  }
+
+  console.info(`  [LLM] ✅ score=${result.score}, lens=${result.lens} — ${result.reasoning.slice(0, 80)}`);
+  return result;
 }

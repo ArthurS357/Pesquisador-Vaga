@@ -84,8 +84,13 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     }
 
     // Verificar cache por canonicalHash (vaga já avaliada em run anterior?)
+    // Exige `reasoning != null`: só veredito do LLM (ou revalidação humana) gera
+    // reasoning. Scores de FALLBACK heurístico (Ollama offline) ficam com
+    // reasoning null e NÃO entram no cache — senão, uma run com Ollama fora
+    // "envenenaria" o hash e barraria o julgamento LLM de vagas irmãs quando o
+    // Ollama voltasse.
     const cached = await prisma.job.findFirst({
-      where: { canonicalHash: hash, score: { not: null } },
+      where: { canonicalHash: hash, score: { not: null }, reasoning: { not: null } },
       select: { score: true, lens: true, reasoning: true },
     });
 

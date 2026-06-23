@@ -33,6 +33,9 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
+  "overrides": {
+    "postcss": "^8.5.10"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "cheerio": "^1.2.0",

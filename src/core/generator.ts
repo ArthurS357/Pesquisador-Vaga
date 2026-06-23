@@ -1,9 +1,8 @@
 import { join } from "path";
-import { decodeHtml, fetchWithTimeout } from "./utils";
+import { decodeHtml } from "./utils";
 import { loadProfile } from "../utils/profile";
+import { ollamaGenerate } from "./ollama";
 
-const OLLAMA_URL = "http://localhost:11434/api/generate";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:8b";
 // carta é mais longa que o judge — em GPU (RX 7600) fica em ~10-15s.
 const GENERATOR_TIMEOUT_MS = 60_000;
 
@@ -78,41 +77,15 @@ Description: ${desc ?? "(no description — focus on the job title and company)"
  */
 export async function generateCoverLetter(input: CoverLetterInput): Promise<string | null> {
   const prompt = buildPrompt(input, loadProfile());
-  console.info(`  [generator] 📤 Gerando carta para "${input.title}" @ ${input.company}...`);
-  const t0 = Date.now();
-  try {
-    const res = await fetchWithTimeout(
-      OLLAMA_URL,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
-      },
-      GENERATOR_TIMEOUT_MS,
-    );
-    if (!res.ok) {
-      console.warn(`  [generator] ❌ Ollama retornou HTTP ${res.status}.`);
-      return null;
-    }
-    const body = (await res.json()) as { response?: string };
-    const text = body.response?.trim();
-    if (!text) {
-      console.warn(`  [generator] ❌ Resposta vazia do Ollama.`);
-      return null;
-    }
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    console.info(`  [generator] ✅ Carta gerada em ${elapsed}s (${text.length} chars).`);
-    return text;
-  } catch (err) {
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    if (err instanceof Error && err.name === "AbortError") {
-      console.warn(`  [generator] ❌ Timeout após ${elapsed}s (limite: ${GENERATOR_TIMEOUT_MS / 1000}s).`);
-    } else {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`  [generator] ❌ Erro: ${msg}.`);
-    }
-    return null;
+  const text = await ollamaGenerate({
+    prompt,
+    timeoutMs: GENERATOR_TIMEOUT_MS,
+    label: "generator",
+  });
+  if (text) {
+    console.info(`  [generator] ✅ Carta gerada (${text.length} chars).`);
   }
+  return text;
 }
 
 /** Monta o markdown final (frontmatter + corpo) para gravar em disco. */

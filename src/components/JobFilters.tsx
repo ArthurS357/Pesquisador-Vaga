@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   buildQuery, SORT_OPTIONS, sourceLabel, lensLabel,
@@ -17,6 +17,10 @@ export function JobFilters({ current, sources, lenses }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [min, setMin] = useState(current.min);
+
+  // Ressincroniza o slider quando a URL muda por fora (back/forward do browser):
+  // useState não re-inicializa com a nova prop sozinho.
+  useEffect(() => setMin(current.min), [current.min]);
 
   // Toda mudança de filtro reseta a página e sobe a lista suavemente.
   function commit(override: Partial<JobFilterState>): void {

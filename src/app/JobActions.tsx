@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   rejectJob, applyJob, updateJobRanking, triggerGeneration, revalidateJob, type ActionResult,
 } from "./actions";
@@ -67,7 +67,8 @@ function RevalidateModal({
   useEffect(() => {
     dialogRef.current?.showModal();
     textareaRef.current?.focus();
-    return () => dialogRef.current?.close();
+    // .close() em <dialog> já fechado (ex.: Escape) lança DOMException no Chrome.
+    return () => { if (dialogRef.current?.open) dialogRef.current.close(); };
   }, []);
 
   const tooShort = text.trim().length < MIN_CHARS;
@@ -141,6 +142,10 @@ export function JobActions({
   const [lensInput, setLensInput] = useState(lens ?? "");
 
   const busy = pending || revalidating;
+
+  // Estável: sem isso, o ActionToast recria o timer de 5s a cada re-render do
+  // pai (durante transitions), adiando — ou impedindo — o auto-dismiss.
+  const closeToast = useCallback(() => setToast(null), []);
 
   function run(fn: () => Promise<ActionResult>): void {
     setError(null);
@@ -251,7 +256,7 @@ export function JobActions({
 
       {busy && <span className="msg-pending">processando…</span>}
       {error && <span className="msg-error">erro: {error}</span>}
-      {toast && <ActionToast toast={toast} onClose={() => setToast(null)} />}
+      {toast && <ActionToast toast={toast} onClose={closeToast} />}
 
       {modalOpen && (
         <RevalidateModal
