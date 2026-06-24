@@ -318,7 +318,10 @@ export function parseGenericJobEmail(from: string, subject: string, body: string
 
   const applyUrl = firstJobLink(body);
   const text = cheerio.load(body).root().text().replace(/\s+/g, " ").trim();
-  const description = text ? text.slice(0, 2000) : null;
+  // Cheerio já devolveu texto cru (sem tags) → aqui só capamos e embrulhamos no
+  // mesmo fence de isolamento de IA do sanitizer (Blueprint D) p/ blindar contra
+  // prompt injection. Sem strip de tag de propósito (não há markup a remover).
+  const description = text ? `\n\`\`\`[UNTRUSTED_INGEST]\n${text.slice(0, 2000)}\n\`\`\`\n` : null;
 
   console.log(`[EmailAlertAdapter] 📦 Genérico vaga: "${title}" @ ${company}`);
   return [
