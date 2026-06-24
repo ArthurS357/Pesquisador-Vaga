@@ -1,5 +1,5 @@
 import { Job, JobAdapter, AdapterContext } from "../core/types";
-import { decodeHtml } from "../core/utils";
+import { sanitizeJobDescription } from "../core/sanitizer";
 import { resilientFetch } from "../core/http-client";
 
 const ASHBY_BASE = "https://api.ashbyhq.com/posting-api/job-board";
@@ -29,7 +29,7 @@ export function ashbyAdapter(config: { id: string; name: string }): JobAdapter {
         company: config.name,
         title: j.title,
         location: j.location ?? null,
-        description: j.descriptionHtml ? decodeHtml(j.descriptionHtml) : null,
+        description: j.descriptionHtml ? sanitizeJobDescription(j.descriptionHtml) : null,
         applyUrl: j.jobUrl,
         updatedAt: j.updatedAt ? new Date(j.updatedAt) : null,
       }));

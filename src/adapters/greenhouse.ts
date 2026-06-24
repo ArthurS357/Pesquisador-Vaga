@@ -1,5 +1,5 @@
 import { Job, JobAdapter, AdapterContext } from "../core/types";
-import { decodeHtml } from "../core/utils";
+import { sanitizeJobDescription } from "../core/sanitizer";
 import { resilientFetch } from "../core/http-client";
 
 const GH_BASE = "https://boards-api.greenhouse.io/v1/boards";
@@ -29,7 +29,7 @@ export function greenhouseAdapter(config: { id: string; name: string }): JobAdap
         company: config.name,
         title: j.title,
         location: j.location?.name ?? null,
-        description: j.content ? decodeHtml(j.content) : null,
+        description: j.content ? sanitizeJobDescription(j.content) : null,
         applyUrl: j.absolute_url,
         updatedAt: j.updated_at ? new Date(j.updated_at) : null,
       }));
