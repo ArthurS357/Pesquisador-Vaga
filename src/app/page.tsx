@@ -8,6 +8,7 @@ import { JobGridSkeleton } from "@/components/JobCardSkeleton";
 import { StatusTabs } from "@/components/StatusTabs";
 import { CleanupPanel } from "@/components/CleanupPanel";
 import { OverviewHero, type OverviewMetrics } from "@/components/OverviewHero";
+import { HomeDashboard } from "@/components/HomeDashboard";
 import { collectorStatus } from "@/core/collector";
 import { HISTORY_STATUSES, JOB_STATUS } from "./status";
 import {
@@ -22,11 +23,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
   const sp = await searchParams;
   const current = parseFilters(sp);
 
+  // View switcher via search param: 'ops' = bloco operacional, qualquer outro
+  // valor (vazio/ausente/'home') = painel analítico de entrada.
+  const viewRaw = Array.isArray(sp.view) ? sp.view[0] : sp.view;
+  const view: "home" | "ops" = viewRaw === "ops" ? "ops" : "home";
+
   const queueWhere = { status: { in: QUEUE_STATUS_LIST } };
   // Contagens por status respeitando os filtros atuais (menos o próprio status):
   // alimentam os badges das abas sem uma query extra por aba.
   const countWhere = { ...queueFiltersWhere(current), status: { in: QUEUE_STATUS_LIST } };
-  const [sourceRows, lensRows, history, statusGroups, allStatusGroups] = await Promise.all([
+  const [sourceRows, lensRows, history, statusGroups, allStatusGroups, dashboardRows] = await Promise.all([
     prisma.job.findMany({ where: queueWhere, select: { source: true }, distinct: ["source"], orderBy: { source: "asc" } }),
     prisma.job.findMany({ where: { ...queueWhere, lens: { not: null } }, select: { lens: true }, distinct: ["lens"], orderBy: { lens: "asc" } }),
     prisma.job.findMany({
@@ -38,6 +44,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
     prisma.job.groupBy({ by: ["status"], where: countWhere, _count: { _all: true } }),
     // Contagens globais (sem filtro) para os indicadores do painel de controle.
     prisma.job.groupBy({ by: ["status"], _count: { _all: true } }),
+    // Projeção leve (lens + status) p/ os gráficos do painel de início.
+    prisma.job.findMany({ select: { lens: true, status: true } }),
   ]);
   const sources = sourceRows.map((r) => r.source);
   const lenses = lensRows.map((r) => r.lens).filter((l): l is string => l !== null);
@@ -75,58 +83,97 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
 
   return (
     <main className="wrap">
-      <header className="site-header">
-        <h1>Job Engine — Curadoria</h1>
-        <span className="sub">fila ranqueada · curadoria human-in-the-loop</span>
+      <header className="site-header flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1>Job Engine — Curadoria</h1>
+          <span className="sub">fila ranqueada · curadoria human-in-the-loop</span>
+        </div>
+
+        {/* Segmented control (Linear): alterna home ↔ ops sem scroll jump. */}
+        <nav
+          aria-label="Alternar visualização"
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-surface p-1 text-sm"
+        >
+          <Link
+            href="/?view=home"
+            scroll={false}
+            aria-current={view === "home" ? "page" : undefined}
+            className={`rounded-full px-3.5 py-1.5 font-medium transition-colors ${
+              view === "home"
+                ? "bg-surface-2 text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            📊 Visão Geral
+          </Link>
+          <Link
+            href="/?view=ops"
+            scroll={false}
+            aria-current={view === "ops" ? "page" : undefined}
+            className={`rounded-full px-3.5 py-1.5 font-medium transition-colors ${
+              view === "ops"
+                ? "bg-surface-2 text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            ⚡ Operacional
+          </Link>
+        </nav>
       </header>
 
       <OverviewHero metrics={metrics} initialStatus={collectorStatus()} />
 
-      <section className="command-bar" aria-label="Navegação e filtros da fila">
-        <StatusTabs current={current} counts={tabCounts} />
-        <JobFilters current={current} sources={sources} lenses={lenses} />
-        {viewTotal > 0 && (
-          <div className="command-bar-foot">
-            Mostrando {rangeStart}–{rangeEnd} de {viewTotal} vaga(s)
-          </div>
-        )}
-      </section>
+      {view === "home" ? (
+        <HomeDashboard jobs={dashboardRows} />
+      ) : (
+        <>
+          <section className="command-bar" aria-label="Navegação e filtros da fila">
+            <StatusTabs current={current} counts={tabCounts} />
+            <JobFilters current={current} sources={sources} lenses={lenses} />
+            {viewTotal > 0 && (
+              <div className="command-bar-foot">
+                Mostrando {rangeStart}–{rangeEnd} de {viewTotal} vaga(s)
+              </div>
+            )}
+          </section>
 
-      <Suspense key={JSON.stringify(sp)} fallback={<JobGridSkeleton />}>
-        <JobList searchParams={sp} />
-      </Suspense>
+          <Suspense key={JSON.stringify(sp)} fallback={<JobGridSkeleton />}>
+            <JobList searchParams={sp} />
+          </Suspense>
 
-      <section className="history">
-        <h2>Histórico ({history.length})</h2>
-        {history.length === 0 ? (
-          <p className="meta">Nenhuma candidatura disparada ou rejeitada ainda.</p>
-        ) : (
-          <div className="hist-list">
-            {history.map((job) => {
-              const hasArtifact = job.status === JOB_STATUS.GENERATED || job.status === JOB_STATUS.APPLIED;
-              return (
-                <div className="hist-row" key={job.id}>
-                  <span className={`badge score ${scoreClass(job.score)}`}>{fmtScore(job.score)}</span>
-                  <span className={`badge ${lensClass(job.lens)}`}>{lensLabel(job.lens)}</span>
-                  <span className="grow">
-                    <span className="title">{job.title}</span>
-                    <span className="meta"> · {job.company}</span>
-                  </span>
-                  {/* Smoke test Tailwind: pílula de status via tokens-ponte
-                      (bg-surface-2 / border-border / text-muted-foreground). */}
-                  <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-border bg-surface-2 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                    {job.status}
-                  </span>
-                  {hasArtifact && <Link href={`/job/${job.id}/artifact`}>Ler carta</Link>}
-                  {job.status === JOB_STATUS.GENERATED && <MarkAppliedButton id={job.id} />}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+          <section className="history">
+            <h2>Histórico ({history.length})</h2>
+            {history.length === 0 ? (
+              <p className="meta">Nenhuma candidatura disparada ou rejeitada ainda.</p>
+            ) : (
+              <div className="hist-list">
+                {history.map((job) => {
+                  const hasArtifact = job.status === JOB_STATUS.GENERATED || job.status === JOB_STATUS.APPLIED;
+                  return (
+                    <div className="hist-row" key={job.id}>
+                      <span className={`badge score ${scoreClass(job.score)}`}>{fmtScore(job.score)}</span>
+                      <span className={`badge ${lensClass(job.lens)}`}>{lensLabel(job.lens)}</span>
+                      <span className="grow">
+                        <span className="title">{job.title}</span>
+                        <span className="meta"> · {job.company}</span>
+                      </span>
+                      {/* Smoke test Tailwind: pílula de status via tokens-ponte
+                          (bg-surface-2 / border-border / text-muted-foreground). */}
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-border bg-surface-2 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                        {job.status}
+                      </span>
+                      {hasArtifact && <Link href={`/job/${job.id}/artifact`}>Ler carta</Link>}
+                      {job.status === JOB_STATUS.GENERATED && <MarkAppliedButton id={job.id} />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
-      <CleanupPanel />
+          <CleanupPanel />
+        </>
+      )}
     </main>
   );
 }
