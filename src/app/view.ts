@@ -52,6 +52,9 @@ export function parseFilters(sp: RawParams): JobFilterState {
 export function buildQuery(s: JobFilterState, override: Partial<JobFilterState> = {}): string {
   const m: JobFilterState = { ...s, ...override };
   const p = new URLSearchParams();
+  // Preserva SEMPRE a view operacional. Sem isto, qualquer clique em filtro/aba
+  // some com `view` da URL e a page.tsx defaulta p/ ?view=home (amnésia de URL).
+  p.set("view", "ops");
   if (m.q) p.set("q", m.q);
   if (m.sources.length) p.set("sources", m.sources.join(","));
   if (m.lenses.length) p.set("lenses", m.lenses.join(","));

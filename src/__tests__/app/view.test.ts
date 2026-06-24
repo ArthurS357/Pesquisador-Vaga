@@ -71,23 +71,23 @@ describe("buildQuery", () => {
     page: 1,
   };
 
-  it("retorna '/' quando não há filtros ativos", () => {
-    expect(buildQuery(base)).toBe("/");
+  it("preserva view=ops mesmo sem filtros ativos (anti-amnésia de URL)", () => {
+    expect(buildQuery(base)).toBe("/?view=ops");
   });
 
-  it("serializa filtros não-default na query string", () => {
+  it("serializa filtros não-default na query string (com view=ops na frente)", () => {
     expect(buildQuery(base, { sources: ["greenhouse"], min: 50, sort: "recent" })).toBe(
-      "/?sources=greenhouse&min=50&sort=recent"
+      "/?view=ops&sources=greenhouse&min=50&sort=recent"
     );
   });
 
-  it("omite page=1 e sort=score por serem defaults", () => {
-    expect(buildQuery(base, { page: 1, sort: "score" })).toBe("/");
-    expect(buildQuery(base, { page: 2 })).toBe("/?page=2");
+  it("omite page=1 e sort=score por serem defaults, mantendo view=ops", () => {
+    expect(buildQuery(base, { page: 1, sort: "score" })).toBe("/?view=ops");
+    expect(buildQuery(base, { page: 2 })).toBe("/?view=ops&page=2");
   });
 
-  it("serializa q e status", () => {
-    expect(buildQuery(base, { q: "node", status: "ACTIVE" })).toBe("/?q=node&status=ACTIVE");
+  it("serializa q e status preservando view=ops", () => {
+    expect(buildQuery(base, { q: "node", status: "ACTIVE" })).toBe("/?view=ops&q=node&status=ACTIVE");
   });
 });
 
