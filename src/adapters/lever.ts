@@ -1,5 +1,6 @@
 import { Job, JobAdapter, AdapterContext } from "../core/types";
-import { fetchWithTimeout, decodeHtml } from "../core/utils";
+import { decodeHtml } from "../core/utils";
+import { resilientFetch } from "../core/http-client";
 
 const LEVER_BASE = "https://api.lever.co/v0/postings";
 
@@ -18,7 +19,7 @@ export function leverAdapter(config: { id: string; name: string }): JobAdapter {
     name: `Lever (${config.name})`,
     fetchJobs: async (ctx?: AdapterContext) => {
       const url = `${LEVER_BASE}/${config.id}?mode=json`;
-      const res = await fetchWithTimeout(url, { headers: { "User-Agent": "job-engine/0.1" } });
+      const res = await resilientFetch(url);
       if (!res.ok) throw new Error(`Lever[${config.id}]: HTTP ${res.status}`);
       const data = (await res.json()) as LeverJob[];
       if (!Array.isArray(data)) throw new Error(`Lever[${config.id}]: Invalid payload`);

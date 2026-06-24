@@ -1,5 +1,6 @@
 import { Job, JobAdapter, AdapterContext } from "../core/types";
-import { fetchWithTimeout, decodeHtml } from "../core/utils";
+import { decodeHtml } from "../core/utils";
+import { resilientFetch } from "../core/http-client";
 
 const GH_BASE = "https://boards-api.greenhouse.io/v1/boards";
 
@@ -17,7 +18,7 @@ export function greenhouseAdapter(config: { id: string; name: string }): JobAdap
     name: `Greenhouse (${config.name})`,
     fetchJobs: async (ctx?: AdapterContext) => {
       const url = `${GH_BASE}/${config.id}/jobs?content=true`;
-      const res = await fetchWithTimeout(url, { headers: { "User-Agent": "job-engine/0.1" } });
+      const res = await resilientFetch(url);
       if (!res.ok) throw new Error(`Greenhouse[${config.id}]: HTTP ${res.status}`);
       const data = (await res.json()) as { jobs: GhJob[] };
       if (!data || !Array.isArray(data.jobs)) throw new Error(`Greenhouse[${config.id}]: Invalid payload`);

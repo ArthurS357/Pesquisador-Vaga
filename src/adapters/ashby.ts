@@ -1,5 +1,6 @@
 import { Job, JobAdapter, AdapterContext } from "../core/types";
-import { fetchWithTimeout, decodeHtml } from "../core/utils";
+import { decodeHtml } from "../core/utils";
+import { resilientFetch } from "../core/http-client";
 
 const ASHBY_BASE = "https://api.ashbyhq.com/posting-api/job-board";
 
@@ -17,7 +18,7 @@ export function ashbyAdapter(config: { id: string; name: string }): JobAdapter {
     name: `Ashby (${config.name})`,
     fetchJobs: async (ctx?: AdapterContext) => {
       const url = `${ASHBY_BASE}/${config.id}`;
-      const res = await fetchWithTimeout(url, { headers: { "User-Agent": "job-engine/0.1" } });
+      const res = await resilientFetch(url);
       if (!res.ok) throw new Error(`Ashby[${config.id}]: HTTP ${res.status}`);
       const data = (await res.json()) as { jobs: AshbyJob[] };
       if (!data || !Array.isArray(data.jobs)) throw new Error(`Ashby[${config.id}]: Invalid payload`);
