@@ -1,5 +1,5 @@
 import { Job, JobAdapter, AdapterContext } from "../core/types";
-import { decodeHtml } from "../core/utils";
+import { sanitizeJobDescription } from "../core/sanitizer";
 import { resilientFetch } from "../core/http-client";
 
 const LEVER_BASE = "https://api.lever.co/v0/postings";
@@ -30,7 +30,9 @@ export function leverAdapter(config: { id: string; name: string }): JobAdapter {
         company: config.name,
         title: j.text,
         location: j.categories?.location ?? null,
-        description: j.description ? decodeHtml(j.description) : (j.descriptionPlain || null),
+        description: j.description
+          ? sanitizeJobDescription(j.description)
+          : (j.descriptionPlain ? sanitizeJobDescription(j.descriptionPlain) : null),
         applyUrl: j.hostedUrl,
         updatedAt: j.updatedAt ? new Date(j.updatedAt) : null,
       }));
