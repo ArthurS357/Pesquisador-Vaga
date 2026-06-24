@@ -1,5 +1,6 @@
 import { Job, JobAdapter, AdapterContext } from "../core/types";
 import { hashSourceId, resolveTrackingUrl } from "../core/utils";
+import { CircuitBreaker, withDeadline } from "../core/circuit-breaker";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import * as cheerio from "cheerio";
@@ -343,137 +344,168 @@ function formatImapDate(d: Date): string {
 // Fallback de primeira execução: olhar os últimos 7 dias de e-mails.
 const DEFAULT_LOOKBACK_DAYS = 7;
 
+// Deadline absoluto da sessão IMAP (connect→search→fetch). Estourou → close().
+const IMAP_DEADLINE_MS = 30_000;
+// Disjuntor de processo: 3 falhas consecutivas → OPEN 5min. Singleton p/ valer
+// entre ticks do worker (cron) — fast-fail enquanto a fonte está caída.
+const emailBreaker = new CircuitBreaker();
+
+/**
+ * Sessão IMAP: conecta, busca a janela e parseia. Re-lança erro de conexão p/ o
+ * circuit breaker contabilizar a falha. `client.logout()` SEMPRE no `finally`
+ * (engolido se o socket já caiu) — mata socket zumbi. Erros de parsing por
+ * e-mail seguem isolados no try interno (não derrubam a sessão nem o breaker).
+ */
+async function imapSession(client: ImapFlow, ctx: AdapterContext | undefined): Promise<Job[]> {
+  const jobs: Job[] = [];
+  try {
+    console.log(`[EmailAlertAdapter] 🔌 Conectando ao IMAP...`);
+    await client.connect();
+    console.log(`[EmailAlertAdapter] ✅ Conectado ao IMAP`);
+
+    const lock = await client.getMailboxLock("INBOX");
+    try {
+      // Janela incremental: usa ctx.since (último e-mail persistido) ou,
+      // na primeira run, os últimos DEFAULT_LOOKBACK_DAYS dias.
+      const sinceDate = ctx?.since ?? new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 86_400_000);
+      const days = Math.max(1, Math.round((Date.now() - sinceDate.getTime()) / 86_400_000));
+      console.log(`[EmailAlertAdapter] 📅 Buscando e-mails desde ${formatImapDate(sinceDate)} (${days} dia(s))`);
+
+      // IMAP SINCE tem granularidade de dia — pequena sobreposição é OK
+      // (o dedupe por source:sourceId no engine remove repetições).
+      const searchResult = await client.search({ since: sinceDate });
+      const seqList = Array.isArray(searchResult) ? searchResult : [];
+      console.log(`[EmailAlertAdapter] 📬 ${seqList.length} e-mail(s) no intervalo`);
+
+      if (seqList.length === 0) {
+        console.log(`[EmailAlertAdapter] 📭 Nenhum e-mail novo — nenhuma vaga extraída.`);
+      } else {
+        let processed = 0;
+        for await (const message of client.fetch(seqList, { source: true, envelope: true })) {
+          if (!message.source) continue;
+          processed++;
+
+          try {
+            const parsed = await simpleParser(message.source);
+            const html = parsed.html || parsed.textAsHtml || "";
+            const subject = parsed.subject || "";
+            const date = parsed.date || new Date();
+            const sender = parsed.from?.text?.toLowerCase() || "";
+
+            let parsedJobs: Job[] = [];
+            // Parser dedicado de remetente que SÓ manda vaga (não LinkedIn).
+            // Se ele retornar 0, vale tentar o genérico antes de perder o e-mail.
+            let dedicatedJobOnly = false;
+            const genericFrom = parsed.from?.text ?? sender;
+            const subjectLc = subject.toLowerCase();
+
+            if (subjectLc.includes("linkedin") || sender.includes("linkedin.com")) {
+              parsedJobs = parseLinkedInJobAlert(html, date);
+            } else if (subjectLc.includes("gupy") || sender.includes("gupy")) {
+              parsedJobs = parseGupyAlert(html, subject, date);
+              dedicatedJobOnly = true;
+            } else if (sender.includes("@infojobs.com.br") || subjectLc.includes("infojobs")) {
+              parsedJobs = parseInfoJobsAlert(html, subject, date);
+              dedicatedJobOnly = true;
+            } else if (sender.includes("@vagas.com.br") || subjectLc.includes("vagas.com")) {
+              parsedJobs = parseVagasComAlert(html, subject, date);
+              dedicatedJobOnly = true;
+            } else {
+              parsedJobs = parseGenericJobEmail(genericFrom, subject, html, date);
+              if (parsedJobs.length === 0) {
+                console.log(`[EmailAlertAdapter]   ↷ ignorado — sem vaga extraível: "${sender}" / assunto: "${subject}"`);
+              }
+            }
+
+            // Template do remetente mudou ou link veio embrulhado em tracking →
+            // parser dedicado vazio. Tenta o genérico (assunto + remetente).
+            if (dedicatedJobOnly && parsedJobs.length === 0) {
+              const fallback = parseGenericJobEmail(genericFrom, subject, html, date);
+              if (fallback.length > 0) {
+                console.log(`[EmailAlertAdapter]   ↻ fallback genérico p/ "${sender}" — parser dedicado retornou 0`);
+                parsedJobs = fallback;
+              }
+            }
+
+            if (parsedJobs.length > 0) {
+              console.log(`[EmailAlertAdapter]   ✦ ${parsedJobs.length} vaga(s) extraída(s) de "${subject}"`);
+            }
+
+            // Resolve redirect links de tracking antes de persistir
+            for (const job of parsedJobs) {
+              const isTrackingUrl =
+                job.applyUrl.includes("linkedin.com/comm/") ||
+                job.applyUrl.includes("click.") ||
+                job.applyUrl.includes("redirect");
+              if (isTrackingUrl) {
+                job.applyUrl = await resolveTrackingUrl(job.applyUrl);
+              }
+            }
+
+            jobs.push(...parsedJobs);
+          } catch (parseErr) {
+            console.warn(`[EmailAlertAdapter] ⚠️  Falha no parsing do e-mail #${processed}:`, parseErr);
+          }
+        }
+
+        console.log(`[EmailAlertAdapter] 📊 ${processed} e-mail(s) processado(s) → ${jobs.length} vaga(s) extraída(s)`);
+      }
+    } finally {
+      lock.release();
+    }
+  } catch (err) {
+    // Re-lança p/ o circuit breaker contar a falha de conexão/busca.
+    console.error(`[EmailAlertAdapter] ❌ Erro na sessão IMAP:`, err);
+    throw err;
+  } finally {
+    // Mata socket zumbi SEMPRE. logout() pode lançar se o socket já caiu → engole.
+    try {
+      await client.logout();
+    } catch {
+      /* socket já encerrado (deadline/erro) — nada a fazer */
+    }
+  }
+
+  return jobs;
+}
+
 export function emailAlertAdapter(config: { host: string; port: number; user: string; pass: string }): JobAdapter {
   return {
     name: `Email Alerts (${config.user})`,
     fetchJobs: async (ctx?: AdapterContext) => {
-      const jobs: Job[] = [];
-
       console.log(`[EmailAlertAdapter] 📧 Iniciando (user=${config.user || "(vazio)"})`);
 
       if (!config.host || !config.user || !config.pass) {
         console.warn(`[EmailAlertAdapter] ⚠️  Credenciais IMAP ausentes — pulando adapter.`);
-        return jobs;
+        return []; // credencial ausente não é falha de fonte → não conta no breaker
       }
 
       // IMAP_ALLOW_SELF_SIGNED=true: escape hatch quando antivírus faz SSL inspection
       // e --use-system-ca não está disponível (ex: Node < 22).
       // Preferência: NODE_OPTIONS=--use-system-ca (injetado via cross-env no package.json).
       const rejectUnauthorized = process.env.IMAP_ALLOW_SELF_SIGNED !== "true";
-      const client = new ImapFlow({
-        host: config.host,
-        port: config.port,
-        secure: true,
-        auth: { user: config.user, pass: config.pass },
-        logger: false,
-        tls: {
-          servername: config.host, // SNI explícito — necessário quando proxy reescreve handshake
-          rejectUnauthorized,
-        },
+      const breakerKey = `imap:${config.host}:${config.user}`;
+
+      // Circuit breaker (fast-fail se aberto) + deadline absoluto (mata socket no estouro).
+      return emailBreaker.exec(breakerKey, () => {
+        const client = new ImapFlow({
+          host: config.host,
+          port: config.port,
+          secure: true,
+          auth: { user: config.user, pass: config.pass },
+          logger: false,
+          tls: {
+            servername: config.host, // SNI explícito — necessário quando proxy reescreve handshake
+            rejectUnauthorized,
+          },
+        });
+
+        return withDeadline(imapSession(client, ctx), IMAP_DEADLINE_MS, `IMAP ${config.host}`, () => {
+          // Deadline estourou: força close() pra derrubar o socket pendurado.
+          console.error(`[EmailAlertAdapter] ⏱️  Deadline ${IMAP_DEADLINE_MS}ms — forçando close do IMAP`);
+          void client.close();
+        });
       });
-
-      try {
-        console.log(`[EmailAlertAdapter] 🔌 Conectando a ${config.host}:${config.port}...`);
-        await client.connect();
-        console.log(`[EmailAlertAdapter] ✅ Conectado ao IMAP`);
-
-        const lock = await client.getMailboxLock("INBOX");
-        try {
-          // Janela incremental: usa ctx.since (último e-mail persistido) ou,
-          // na primeira run, os últimos DEFAULT_LOOKBACK_DAYS dias.
-          const sinceDate = ctx?.since ?? new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 86_400_000);
-          const days = Math.max(1, Math.round((Date.now() - sinceDate.getTime()) / 86_400_000));
-          console.log(`[EmailAlertAdapter] 📅 Buscando e-mails desde ${formatImapDate(sinceDate)} (${days} dia(s))`);
-
-          // IMAP SINCE tem granularidade de dia — pequena sobreposição é OK
-          // (o dedupe por source:sourceId no engine remove repetições).
-          const searchResult = await client.search({ since: sinceDate });
-          const seqList = Array.isArray(searchResult) ? searchResult : [];
-          console.log(`[EmailAlertAdapter] 📬 ${seqList.length} e-mail(s) no intervalo`);
-
-          if (seqList.length === 0) {
-            console.log(`[EmailAlertAdapter] 📭 Nenhum e-mail novo — nenhuma vaga extraída.`);
-          } else {
-            let processed = 0;
-            for await (const message of client.fetch(seqList, { source: true, envelope: true })) {
-              if (!message.source) continue;
-              processed++;
-
-              try {
-                const parsed = await simpleParser(message.source);
-                const html = parsed.html || parsed.textAsHtml || "";
-                const subject = parsed.subject || "";
-                const date = parsed.date || new Date();
-                const sender = parsed.from?.text?.toLowerCase() || "";
-
-                let parsedJobs: Job[] = [];
-                // Parser dedicado de remetente que SÓ manda vaga (não LinkedIn).
-                // Se ele retornar 0, vale tentar o genérico antes de perder o e-mail.
-                let dedicatedJobOnly = false;
-                const genericFrom = parsed.from?.text ?? sender;
-                const subjectLc = subject.toLowerCase();
-
-                if (subjectLc.includes("linkedin") || sender.includes("linkedin.com")) {
-                  parsedJobs = parseLinkedInJobAlert(html, date);
-                } else if (subjectLc.includes("gupy") || sender.includes("gupy")) {
-                  parsedJobs = parseGupyAlert(html, subject, date);
-                  dedicatedJobOnly = true;
-                } else if (sender.includes("@infojobs.com.br") || subjectLc.includes("infojobs")) {
-                  parsedJobs = parseInfoJobsAlert(html, subject, date);
-                  dedicatedJobOnly = true;
-                } else if (sender.includes("@vagas.com.br") || subjectLc.includes("vagas.com")) {
-                  parsedJobs = parseVagasComAlert(html, subject, date);
-                  dedicatedJobOnly = true;
-                } else {
-                  parsedJobs = parseGenericJobEmail(genericFrom, subject, html, date);
-                  if (parsedJobs.length === 0) {
-                    console.log(`[EmailAlertAdapter]   ↷ ignorado — sem vaga extraível: "${sender}" / assunto: "${subject}"`);
-                  }
-                }
-
-                // Template do remetente mudou ou link veio embrulhado em tracking →
-                // parser dedicado vazio. Tenta o genérico (assunto + remetente).
-                if (dedicatedJobOnly && parsedJobs.length === 0) {
-                  const fallback = parseGenericJobEmail(genericFrom, subject, html, date);
-                  if (fallback.length > 0) {
-                    console.log(`[EmailAlertAdapter]   ↻ fallback genérico p/ "${sender}" — parser dedicado retornou 0`);
-                    parsedJobs = fallback;
-                  }
-                }
-
-                if (parsedJobs.length > 0) {
-                  console.log(`[EmailAlertAdapter]   ✦ ${parsedJobs.length} vaga(s) extraída(s) de "${subject}"`);
-                }
-
-                // Resolve redirect links de tracking antes de persistir
-                for (const job of parsedJobs) {
-                  const isTrackingUrl =
-                    job.applyUrl.includes("linkedin.com/comm/") ||
-                    job.applyUrl.includes("click.") ||
-                    job.applyUrl.includes("redirect");
-                  if (isTrackingUrl) {
-                    job.applyUrl = await resolveTrackingUrl(job.applyUrl);
-                  }
-                }
-
-                jobs.push(...parsedJobs);
-              } catch (parseErr) {
-                console.warn(`[EmailAlertAdapter] ⚠️  Falha no parsing do e-mail #${processed}:`, parseErr);
-              }
-            }
-
-            console.log(`[EmailAlertAdapter] 📊 ${processed} e-mail(s) processado(s) → ${jobs.length} vaga(s) extraída(s)`);
-          }
-        } finally {
-          lock.release();
-        }
-      } catch (err) {
-        console.error(`[EmailAlertAdapter] ❌ Erro na conexão IMAP:`, err);
-      } finally {
-        await client.logout();
-      }
-
-      return jobs;
-    }
+    },
   };
 }
