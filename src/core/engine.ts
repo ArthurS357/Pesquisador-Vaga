@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { JobAdapter, Job } from "./types";
 import { canonicalHash } from "./utils";
 import { rankJob } from "./ranker";
@@ -56,6 +57,57 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     return true;
   });
 
+  // ── Pré-carregamento em memória (mapa mestre) — mata o N+1 ────────────────
+  // UMA findMany substitui os 2 SELECTs por vaga (cache por hash + status humano).
+  // Chaves buscadas: composta (source:sourceId) de toda vaga + canonicalHash das
+  // vagas válidas. PrismaPromise dos upserts ficam num buffer (flush em lote).
+  type ExistingRow = {
+    source: string;
+    sourceId: string;
+    status: string;
+    canonicalHash: string | null;
+    score: number | null;
+    lens: string | null;
+    reasoning: string | null;
+  };
+
+  const hashes = [
+    ...new Set(
+      deduplicated.filter((j) => j.title && j.company).map((j) => canonicalHash(j.company, j.title)),
+    ),
+  ];
+  const orConds: Prisma.JobWhereInput[] = deduplicated.map((j) => ({
+    source: j.source,
+    sourceId: j.sourceId,
+  }));
+  if (hashes.length) orConds.push({ canonicalHash: { in: hashes } });
+
+  const existingRows: ExistingRow[] = orConds.length
+    ? await prisma.job.findMany({
+        where: { OR: orConds },
+        select: {
+          source: true, sourceId: true, status: true,
+          canonicalHash: true, score: true, lens: true, reasoning: true,
+        },
+      })
+    : [];
+
+  // Mapa por chave composta: estado atual da vaga (inclui status humano).
+  const existingByKey = new Map<string, ExistingRow>(
+    existingRows.map((r) => [`${r.source}:${r.sourceId}`, r] as const),
+  );
+  // Mapa por canonicalHash: veredito reaproveitável. Espelha o filtro do antigo
+  // findFirst (score+reasoning != null); primeira linha qualificada vence.
+  const existingByHash = new Map<string, ExistingRow>();
+  for (const r of existingRows) {
+    if (r.canonicalHash && r.score !== null && r.reasoning !== null && !existingByHash.has(r.canonicalHash)) {
+      existingByHash.set(r.canonicalHash, r);
+    }
+  }
+
+  // Buffer de escrita: PrismaPromise inertes até o flush transacional pós-loop.
+  const writeBuffer: Prisma.PrismaPromise<unknown>[] = [];
+
   let countBlocked = 0;
   let countLowRelevance = 0;
   let countCacheHit = 0;
@@ -90,10 +142,8 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     // reasoning null e NÃO entram no cache — senão, uma run com Ollama fora
     // "envenenaria" o hash e barraria o julgamento LLM de vagas irmãs quando o
     // Ollama voltasse.
-    const cached = await prisma.job.findFirst({
-      where: { canonicalHash: hash, score: { not: null }, reasoning: { not: null } },
-      select: { score: true, lens: true, reasoning: true },
-    });
+    // Cache por canonicalHash agora sai do mapa em memória (zero query).
+    const cached = existingByHash.get(hash);
 
     let finalScore = heuristic.score;
     let finalLens = heuristic.lens;
@@ -132,18 +182,16 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     // Regra: o motor só altera status para ACTIVE se a vaga for nova ou estiver
     // INACTIVE (ressurreição). Se o humano já classificou (APPROVED/REJECTED/
     // GENERATING/APPLIED), o motor NÃO tem autoridade para sobrescrever.
-    const existing = await prisma.job.findUnique({
-      where: { source_sourceId: { source: job.source, sourceId: job.sourceId } },
-      select: { status: true },
-    });
+    // Status humano agora sai do mapa em memória (zero query).
+    const existing = existingByKey.get(`${job.source}:${job.sourceId}`);
     const nextStatus =
       existing && (HUMAN_OWNED_STATUSES as readonly string[]).includes(existing.status)
         ? existing.status // mantém a decisão humana intacta
         : "ACTIVE"; // vaga nova, já ACTIVE, ou INACTIVE → (re)ativa
 
-    // Upsert no Prisma com campos completos
-    console.log(`💾 Salvando vaga: "${job.title}" @ ${job.company}`);
-    await prisma.job.upsert({
+    // Upsert NÃO dispara aqui: vai pro buffer (PrismaPromise inerte) p/ flush em lote.
+    console.log(`💾 Enfileirando vaga: "${job.title}" @ ${job.company}`);
+    writeBuffer.push(prisma.job.upsert({
       where: { source_sourceId: { source: job.source, sourceId: job.sourceId } },
       update: {
         title: job.title,
@@ -174,8 +222,35 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
         lens: finalLens,
         reasoning: finalReasoning,
       },
-    });
+    }));
+
+    // Espelha o estado escrito nos mapas → próxima vaga do loop vê na hora
+    // (vaga-irmã com mesmo hash dá cache hit sem re-chamar o LLM, como antes).
+    const writtenRow: ExistingRow = {
+      source: job.source,
+      sourceId: job.sourceId,
+      status: existing ? nextStatus : "ACTIVE",
+      canonicalHash: hash,
+      score: finalScore,
+      lens: finalLens,
+      reasoning: finalReasoning,
+    };
+    existingByKey.set(`${job.source}:${job.sourceId}`, writtenRow);
+    if (finalReasoning !== null && finalScore !== null && !existingByHash.has(hash)) {
+      existingByHash.set(hash, writtenRow);
+    }
   }
+
+  // ── Flush transacional em lotes de 50 (protege o single-writer do SQLite) ─
+  // PrismaPromise são inertes até aqui; $transaction roda cada lote atômico.
+  // Lotes de 50 evitam estourar o teto de variáveis por query do SQLite.
+  async function flushWrites(): Promise<void> {
+    const CHUNK = 50;
+    for (let i = 0; i < writeBuffer.length; i += CHUNK) {
+      await prisma.$transaction(writeBuffer.slice(i, i + CHUNK));
+    }
+  }
+  await flushWrites();
 
   // ── Soft-delete: vagas não vistas nesta run → INACTIVE ──────────────────
   const expired = await prisma.job.updateMany({
