@@ -39,6 +39,13 @@ const DEFAULT_POLICY: ResilientPolicy = {
 /** Espaçamento mínimo entre INÍCIOS de request ao mesmo host → 2 req/s. */
 const PER_HOST_MIN_INTERVAL_MS = 500;
 
+/**
+ * Teto do sleep de Retry-After. Alvo pode pedir horas de pausa; não congelamos
+ * a esteira local por isso. Dormimos no máximo 60s; se o alvo INSISTIR em pedir
+ * além do teto numa 2ª resposta, abortamos a request.
+ */
+const MAX_RETRY_AFTER_MS = 60_000;
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -132,6 +139,8 @@ export async function resilientFetch(
   const reqInit = withUserAgent(init, p.userAgent);
 
   let lastError: unknown;
+  // Já demos a 1 pausa-teto (Retry-After > 60s)? 2ª insistência → aborta.
+  let longPauseGranted = false;
 
   for (let attempt = 0; attempt <= p.retries; attempt++) {
     await limiter.acquire(host);
@@ -149,11 +158,24 @@ export async function resilientFetch(
 
     // 429 / 503 → escudo Retry-After (pausa o host) ou backoff.
     if (RETRYABLE_STATUS.has(res.status)) {
-      if (attempt === p.retries) return res;
       const retryAfter = parseRetryAfter(res.headers.get("retry-after"));
+      const overCeiling = retryAfter !== null && retryAfter > MAX_RETRY_AFTER_MS;
+
+      // Alvo já levou uma pausa-teto e SEGUE pedindo > 60s → aborta a request,
+      // pra não pendurar a esteira local atrás de um cooldown de horas.
+      if (overCeiling && longPauseGranted) {
+        throw new Error(
+          `resilientFetch: ${host} insiste em Retry-After acima do teto de 60s — abortado`,
+        );
+      }
+      if (attempt === p.retries) return res;
+
       if (retryAfter !== null) {
-        limiter.pause(host, retryAfter);
-        await sleep(retryAfter);
+        // Teto: alvo pede 2h → dormimos no máximo 60s.
+        const waitMs = Math.min(retryAfter, MAX_RETRY_AFTER_MS);
+        if (overCeiling) longPauseGranted = true;
+        limiter.pause(host, waitMs);
+        await sleep(waitMs);
       } else {
         await sleep(backoffDelay(attempt, p));
       }
