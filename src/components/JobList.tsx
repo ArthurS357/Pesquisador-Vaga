@@ -3,9 +3,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { JobCard } from "./JobCard";
 import {
-  buildQuery, parseFilters, PAGE_SIZE, QUEUE_STATUS_LIST,
+  buildQuery, parseFilters, PAGE_SIZE,
   type JobFilterState, type RawParams, type SortKey,
 } from "@/app/view";
+import { JOB_STATUS } from "@/app/status";
 
 function orderFor(sort: SortKey): Prisma.JobOrderByWithRelationInput[] {
   switch (sort) {
@@ -31,7 +32,7 @@ function EmptyFiltered() {
     <div className="state">
       <span className="state-icon">🔍</span>
       <p>Nenhuma vaga corresponde aos filtros.</p>
-      <p><Link href="/">Limpar filtros</Link> para ver a fila completa.</p>
+      <p><Link href="/?view=ops">Limpar filtros</Link> para ver a fila completa.</p>
     </div>
   );
 }
@@ -77,9 +78,11 @@ export function queueFiltersWhere(state: JobFilterState): Prisma.JobWhereInput {
 export async function JobList({ searchParams }: { searchParams: RawParams }) {
   const state = parseFilters(searchParams);
 
+  // Facet de status: aba específica → aquele status; "Todas" (null) → tudo que
+  // é visível (menos INACTIVE), englobando fila ativa, aprovadas e histórico.
   const where: Prisma.JobWhereInput = {
     ...queueFiltersWhere(state),
-    status: state.status ?? { in: QUEUE_STATUS_LIST },
+    status: state.status ?? { not: JOB_STATUS.INACTIVE },
   };
 
   const [totalInDb, total, jobs] = await Promise.all([
