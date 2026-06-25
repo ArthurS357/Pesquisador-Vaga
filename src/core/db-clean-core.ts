@@ -167,6 +167,8 @@ export async function executeCleanup(
   const { idSet, criterionCounts: _ } = await collectSafeIds(prisma, defs);
   const allIds = Array.from(idSet);
   const { safe: toDelete, skipped } = await excludeHumanOwned(prisma, allIds);
+  // Lookup O(1) por critério (substitui Array.includes O(n) dentro do filter).
+  const toDeleteSet = new Set(toDelete);
 
   if (toDelete.length === 0) {
     const criteria: CriterionCount[] = defs.map((def) => ({
@@ -186,7 +188,7 @@ export async function executeCleanup(
       where: def.where,
       select: { id: true },
     });
-    const eligibleIds = jobs.map((j) => j.id).filter((id) => toDelete.includes(id));
+    const eligibleIds = jobs.map((j) => j.id).filter((id) => toDeleteSet.has(id));
 
     if (eligibleIds.length === 0) {
       criteria.push({ key: def.key, label: def.label, count: 0 });
