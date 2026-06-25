@@ -434,15 +434,24 @@ async function imapSession(client: ImapFlow, ctx: AdapterContext | undefined): P
               console.log(`[EmailAlertAdapter]   ✦ ${parsedJobs.length} vaga(s) extraída(s) de "${subject}"`);
             }
 
-            // Resolve redirect links de tracking antes de persistir
-            for (const job of parsedJobs) {
-              const isTrackingUrl =
+            // Resolve redirect links de tracking antes de persistir.
+            // Paralelizado em lotes de 5 (HEADs concorrentes em vez de serial):
+            // um alerta com dezenas de vagas não enfileira RTTs até estourar o
+            // IMAP_DEADLINE_MS. Mutação de applyUrl in-place, igual à versão serial.
+            const needsResolve = parsedJobs.filter(
+              (job) =>
                 job.applyUrl.includes("linkedin.com/comm/") ||
                 job.applyUrl.includes("click.") ||
-                job.applyUrl.includes("redirect");
-              if (isTrackingUrl) {
-                job.applyUrl = await resolveTrackingUrl(job.applyUrl);
-              }
+                job.applyUrl.includes("redirect"),
+            );
+            const RESOLVE_CHUNK = 5;
+            for (let k = 0; k < needsResolve.length; k += RESOLVE_CHUNK) {
+              const batch = needsResolve.slice(k, k + RESOLVE_CHUNK);
+              await Promise.all(
+                batch.map(async (job) => {
+                  job.applyUrl = await resolveTrackingUrl(job.applyUrl);
+                }),
+              );
             }
 
             jobs.push(...parsedJobs);
@@ -506,7 +515,13 @@ export function emailAlertAdapter(config: { host: string; port: number; user: st
         return withDeadline(imapSession(client, ctx), IMAP_DEADLINE_MS, `IMAP ${config.host}`, () => {
           // Deadline estourou: força close() pra derrubar o socket pendurado.
           console.error(`[EmailAlertAdapter] ⏱️  Deadline ${IMAP_DEADLINE_MS}ms — forçando close do IMAP`);
-          void client.close();
+          // close() é síncrono (retorna void). Se o socket já morreu, pode lançar
+          // de forma síncrona → embrulha p/ não escapar do gancho de timeout.
+          try {
+            client.close();
+          } catch {
+            /* socket já encerrado (deadline/erro) — nada a fazer */
+          }
         });
       });
     },
