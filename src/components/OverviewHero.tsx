@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { CollectorStatus } from "@/core/collector";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ export function OverviewHero({
   metrics: OverviewMetrics;
   initialStatus: CollectorStatus;
 }) {
+  const router = useRouter();
   const [running, setRunning] = useState(initialStatus.running);
   const [dispatching, setDispatching] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -96,6 +98,10 @@ export function OverviewHero({
           const res = await fetch("/api/collect", { cache: "no-store" });
           if (!res.ok) return;
           const status = (await res.json()) as CollectorStatus;
+          // Borda de conclusão (running true→false): o coletor (processo em
+          // background, fora do ciclo da request) gravou vagas novas no banco.
+          // router.refresh() repuxa o RSC e traz as vagas sem exigir F5.
+          if (!status.running) router.refresh();
           setRunning(status.running);
         } catch {
           /* erro transitório de rede — tenta de novo no próximo tick */
@@ -103,7 +109,7 @@ export function OverviewHero({
       })();
     }, POLL_MS);
     return () => clearInterval(id);
-  }, [running]);
+  }, [running, router]);
 
   const runCollector = useCallback(async () => {
     setDispatching(true);
