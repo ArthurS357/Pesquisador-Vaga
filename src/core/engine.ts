@@ -31,6 +31,9 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
   const ctx = { since };
 
   // ── Coleta em chunks (controle de concorrência) ──────────────────────────
+  // Fontes que responderam com sucesso nesta run. Alimenta o fail-safe do
+  // soft-delete: só expiramos vagas de fontes que comprovadamente responderam.
+  const seenSources = new Set<string>();
   for (let i = 0; i < adapters.length; i += concurrency) {
     const chunk = adapters.slice(i, i + concurrency);
     const results = await Promise.allSettled(chunk.map((a) => a.fetchJobs(ctx)));
@@ -41,6 +44,7 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
       if (r.status === "fulfilled") {
         console.log(`📥 Adapter "${adapter.name}" retornou ${r.value.length} vaga(s)`);
         all.push(...r.value);
+        for (const job of r.value) seenSources.add(job.source);
       } else {
         const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
         console.error(`  ! adapter falhou [${adapter.name}]:`, msg);
@@ -253,8 +257,13 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
   await flushWrites();
 
   // ── Soft-delete: vagas não vistas nesta run → INACTIVE ──────────────────
+  // Fail-safe: Apenas aplicamos soft-delete em vagas antigas de fontes que responderam com sucesso na rodada atual. Vagas de fontes que falharam ou deram timeout são preservadas.
   const expired = await prisma.job.updateMany({
-    where: { lastSeenAt: { lt: runStartTime }, status: "ACTIVE" },
+    where: {
+      lastSeenAt: { lt: runStartTime },
+      status: "ACTIVE",
+      source: { in: Array.from(seenSources) },
+    },
     data: { status: "INACTIVE" },
   });
 
