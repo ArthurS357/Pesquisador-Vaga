@@ -264,8 +264,7 @@ function companyFromSender(from: string): string {
   return /[A-Z]/.test(raw) ? raw : raw.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function firstJobLink(html: string): string {
-  const $ = cheerio.load(html);
+function firstJobLink($: ReturnType<typeof cheerio.load>): string {
   let fallback = "";
   let found = "";
   $("a").each((_, el) => {
@@ -289,8 +288,7 @@ const JOB_KEYWORDS =
 
 // True se o corpo tem ao menos um link com pista de vaga (path/domínio de ATS).
 // Não usa o fallback "qualquer link" do firstJobLink — exige sinal real.
-function hasJobLink(html: string): boolean {
-  const $ = cheerio.load(html);
+function hasJobLink($: ReturnType<typeof cheerio.load>): boolean {
   let hit = false;
   $("a").each((_, el) => {
     if (hit) return;
@@ -302,7 +300,7 @@ function hasJobLink(html: string): boolean {
 
 // E-mail parece de vaga se o assunto bate keyword OU o corpo traz link de vaga.
 export function looksLikeJobEmail(subject: string, body: string): boolean {
-  return JOB_KEYWORDS.test(subject) || hasJobLink(body);
+  return JOB_KEYWORDS.test(subject) || hasJobLink(cheerio.load(body));
 }
 
 // Fallback para remetentes sem parser dedicado (Zallpy, UMC, recrutadores).
@@ -311,13 +309,17 @@ export function parseGenericJobEmail(from: string, subject: string, body: string
   const title = cleanSubjectToTitle(subject);
   const company = companyFromSender(from);
   if (!title || !company) return [];
-  if (!looksLikeJobEmail(subject, body)) {
+
+  // Uma única árvore DOM reaproveitada p/ detecção + extração (antes: 3-4 loads
+  // da mesma string HTML por e-mail). Corta CPU/RAM de parsing.
+  const $ = cheerio.load(body);
+  if (!JOB_KEYWORDS.test(subject) && !hasJobLink($)) {
     console.log(`[EmailAlertAdapter]   ↷ genérico ignorado — sem sinal de vaga: assunto "${subject}"`);
     return [];
   }
 
-  const applyUrl = firstJobLink(body);
-  const text = cheerio.load(body).root().text().replace(/\s+/g, " ").trim();
+  const applyUrl = firstJobLink($);
+  const text = $.root().text().replace(/\s+/g, " ").trim();
   // Cheerio já devolveu texto cru (sem tags) → aqui só capamos e embrulhamos no
   // mesmo fence de isolamento de IA do sanitizer (Blueprint D) p/ blindar contra
   // prompt injection. Sem strip de tag de propósito (não há markup a remover).
