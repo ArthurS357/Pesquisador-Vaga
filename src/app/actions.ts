@@ -189,6 +189,9 @@ export async function applyJob(id: string): Promise<ActionResult> {
  */
 const revalidateCache = new Map<string, { score: number; lens: string; reasoning: string }>();
 
+/** Teto do cache em memória — evita crescimento ilimitado de RAM (eviction FIFO). */
+const MAX_CACHE_SIZE = 500;
+
 /**
  * Força reavaliação de uma vaga pelo LLM local (Qwen3) com contexto extra colado
  * pelo humano. Não mexe no `status` (curadoria) — só score/lens/reasoning.
@@ -237,6 +240,11 @@ export async function revalidateJob(
     const value = { score: verdict.score, lens: verdict.lens, reasoning: verdict.reasoning };
     await prisma.job.update({ where: { id }, data: value });
     revalidateCache.set(cacheKey, value);
+    // Despeja a entrada mais antiga (1ª chave de inserção) ao estourar o teto.
+    if (revalidateCache.size > MAX_CACHE_SIZE) {
+      const oldest = revalidateCache.keys().next().value;
+      if (oldest !== undefined) revalidateCache.delete(oldest);
+    }
     revalidatePath("/");
     return { ok: true, data: { jobId: id, ...value, fromCache: false } };
   } catch (e) {
