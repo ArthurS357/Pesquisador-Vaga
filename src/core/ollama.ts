@@ -20,7 +20,16 @@ export interface ChatMessage {
 export interface OllamaOptions {
   temperature?: number;
   num_predict?: number;
+  top_p?: number;
+  top_k?: number;
+  /** Semente fixa → reprodutibilidade quando temperature > 0. */
+  seed?: number;
+  /** Penaliza repetição → evita loops degenerados em decodificação greedy. */
+  repeat_penalty?: number;
 }
+
+/** Log verboso (prompt completo + resposta crua) quando LLM_DEBUG=1|true. */
+const LLM_DEBUG = process.env.LLM_DEBUG === "1" || process.env.LLM_DEBUG === "true";
 
 export interface OllamaGenerateParams {
   /**
@@ -61,6 +70,11 @@ export async function ollamaGenerate(params: OllamaGenerateParams): Promise<stri
 
   const approxChars = chatMessages.reduce((n, m) => n + m.content.length, 0);
   console.info(`  ${tag} 📤 Enviando ${chatMessages.length} mensagem(ns) para ${OLLAMA_MODEL} (~${approxChars} chars)...`);
+  if (LLM_DEBUG) {
+    for (const m of chatMessages) {
+      console.debug(`  ${tag} 🐛 PROMPT [${m.role}]:\n${m.content}`);
+    }
+  }
 
   const t0 = Date.now();
   try {
@@ -94,6 +108,7 @@ export async function ollamaGenerate(params: OllamaGenerateParams): Promise<stri
       console.warn(`  ${tag} ❌ Resposta vazia (campo 'message.content' ausente).`);
       return null;
     }
+    if (LLM_DEBUG) console.debug(`  ${tag} 🐛 RESPOSTA CRUA (${text.length} chars):\n${text}`);
     return text;
   } catch (err) {
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);

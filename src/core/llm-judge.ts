@@ -141,7 +141,11 @@ export async function judgeWithLlm(
       { role: "user", content: buildUserMessage(title, company, description) },
     ],
     format: "json",
-    options: { temperature: 0.1, num_predict: 512 },
+    // Avaliação = tarefa determinística: temperature 0 (greedy) → mesmo input
+    // produz sempre o mesmo veredito (mata a inconsistência entre runs). seed fixa
+    // para reprodutibilidade caso a temperatura volte a subir; repeat_penalty
+    // blinda contra loops degenerados que o greedy decode ocasionalmente provoca.
+    options: { temperature: 0, num_predict: 512, seed: 42, repeat_penalty: 1.1 },
     timeoutMs: LLM_TIMEOUT_MS,
     label: "LLM",
   });
@@ -156,6 +160,12 @@ export async function judgeWithLlm(
   if (!result) {
     console.warn(`  [LLM] ❌ Falha ao validar JSON: ${response.slice(0, 200)}`);
     return null;
+  }
+
+  // Reasoning vazio é sintoma de julgamento raso (modelo respondeu o score sem
+  // fundamentar). Não rejeita — só sinaliza para diagnóstico (some com LLM_DEBUG).
+  if (result.reasoning === "") {
+    console.warn(`  [LLM] ⚠️ reasoning vazio (score=${result.score}, lens=${result.lens}) — julgamento sem fundamentação.`);
   }
 
   console.info(`  [LLM] ✅ score=${result.score}, lens=${result.lens} — ${result.reasoning.slice(0, 80)}`);
