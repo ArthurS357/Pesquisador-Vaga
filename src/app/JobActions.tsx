@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
-  rejectJob, undoRejectJob, applyJob, updateJobRanking, triggerGeneration, revalidateJob,
-  type ActionResult,
+  rejectJob, undoRejectJob, applyJob, undoApplyJob, updateJobRanking, triggerGeneration,
+  revalidateJob, type ActionResult,
 } from "./actions";
 import { HamburgerMenu, type MenuAction } from "@/components/HamburgerMenu";
 import { showToast } from "@/components/toast-bus";
@@ -228,7 +228,29 @@ export function JobActions({
       // Em erro, applyJob não revalida → useOptimistic reverte ao normal.
       onOptimisticStatus?.("APPLIED");
       const res = await applyJob(id);
-      if (!res.ok) setToast({ msg: res.error, type: "error" });
+      if (!res.ok) {
+        setToast({ msg: res.error, type: "error" });
+        return;
+      }
+      // Sucesso: a vaga sai da fila e ESTE card desmonta. Toast de "Desfazer" vai
+      // pro host global (igual ao reject); a closure só usa funções de módulo.
+      showToast({
+        msg: "Vaga aplicada",
+        type: "success",
+        durationMs: 5000,
+        action: {
+          label: "Desfazer",
+          run: () => {
+            void undoApplyJob(id).then((r) => {
+              showToast(
+                r.ok
+                  ? { msg: "Aplicação desfeita — vaga de volta à fila", type: "info" }
+                  : { msg: r.error, type: "error" },
+              );
+            });
+          },
+        },
+      });
     });
   }
 

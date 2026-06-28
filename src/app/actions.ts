@@ -207,6 +207,30 @@ export async function applyJob(id: string): Promise<ActionResult> {
 }
 
 /**
+ * Desfaz a aplicação feita direto da fila: APPLIED → ACTIVE. Espelha
+ * `undoRejectJob` para a ação "Desfazer" do toast. Guard de transição: só reverte
+ * se ainda estiver APPLIED. Simplificação aceita: restaura para ACTIVE mesmo que
+ * o estado anterior fosse APPROVED — o motor reavalia/repromove em runs futuras.
+ */
+export async function undoApplyJob(id: string): Promise<ActionResult> {
+  console.log("↩️ Server Action [undoApplyJob] recebida para ID:", id);
+  if (badId(id)) return { ok: false, error: "id inválido" };
+  try {
+    const job = await prisma.job.findUnique({ where: { id }, select: { status: true } });
+    if (!job) return { ok: false, error: "vaga não encontrada" };
+    if (job.status !== JOB_STATUS.APPLIED) {
+      return { ok: false, error: `transição inválida: ${job.status} → ACTIVE (esperado APPLIED)` };
+    }
+    await prisma.job.update({ where: { id }, data: { status: JOB_STATUS.ACTIVE } });
+    revalidatePath("/");
+    return { ok: true };
+  } catch (err) {
+    console.error("❌ Erro ao desfazer aplicação no SQLite:", err);
+    return { ok: false, error: err instanceof Error ? err.message : "falha ao desfazer aplicação" };
+  }
+}
+
+/**
  * Cache em memória das reavaliações manuais. Chave = hash(title|company|
  * combinedDescription); valor = veredito. Vive enquanto o processo do servidor
  * Next viver — reinício/redeploy limpa (aceitável: 1ª chamada pós-restart
