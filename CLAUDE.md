@@ -31,6 +31,19 @@ npm run collect  # = tsx src/index.ts  (greenhouse + lever + ashby + email → r
 > O painel **não** dispara a coleta. Rode o coletor separadamente; depois abra/atualize o painel.
 > `job-engine-step1.ts` na raiz é a fatia vertical do Passo 1 (legado/referência), não o motor atual.
 
+> **Fontes ativas** vivem em `src/index.ts` (`BOARDS`). "Stripe" ali é só o board
+> Greenhouse da *empresa* Stripe — **nunca** foi webhook/canal de pagamento (board
+> desativado por estar fora do foco). Não existe ingestão por Stripe nem `/api/webhooks`.
+
+### Worker / agendamento (`src/worker.ts`, node-cron)
+
+`npm run start:worker` sobe dois crons independentes:
+- **Coleta** — `COLLECT_CRON` (default `0 6 * * *`, 06:00 diário) → `runCollect()`.
+- **Purge** — `PURGE_SCHEDULE` (default `0 4 * * 0`, domingo 04:00) → `purgeInactiveJobs()`:
+  hard-delete de vagas `INACTIVE` não vistas há mais de `PURGE_INACTIVE_DAYS` (default 30).
+  Status de curadoria humana (`REJECTED`/`APPROVED`/`GENERATING`/`GENERATED`/`APPLIED`)
+  são **intocados** pelo purge. Limpeza manual multi-critério segue no `CleanupPanel` / `npm run db:clean`.
+
 ## Banco de dados
 
 ```bash
@@ -51,6 +64,9 @@ INACTIVE = vaga sumiu da fonte (coletor). Oculta no painel.
 - `GENERATING` = carta sendo redigida pelo LLM.  `GENERATED` = carta no disco, aguardando revisão/envio.  `APPLIED` = humano confirmou envio.
 - **Fila** (`src/app/page.tsx`): mostra `ACTIVE` + `APPROVED`, ordenado por `score desc`.
 - **Histórico**: mostra `GENERATING` / `GENERATED` / `APPLIED` / `REJECTED`.
+- **Rejeitar → Desfazer**: ao rejeitar, a vaga sai da fila e o card desmonta; um toast global
+  (`ToastHost` no layout, via `toast-bus`) oferece "Desfazer" por 5s → `undoRejectJob` (`REJECTED → ACTIVE`).
+  O toast vive **acima** dos cards justamente para sobreviver ao desmonte.
 
 ### Regra de autoridade coletor × curadoria
 O coletor (`engine.ts`) **só** promove uma vaga a `ACTIVE` se ela for nova ou estiver `INACTIVE` (ressurreição). Decisões humanas (`APPROVED`/`REJECTED`/`GENERATING`/`GENERATED`/`APPLIED`) **nunca** são sobrescritas por uma nova run de coleta.
@@ -60,8 +76,9 @@ O coletor (`engine.ts`) **só** promove uma vaga a `ACTIVE` se ela for nova ou e
 | Arquivo | Papel |
 |---|---|
 | `src/app/page.tsx` | **Server Component**. Busca vagas no Prisma. Sem `"use client"`. |
-| `src/app/actions.ts` | **Server Actions** (`"use server"`): `rejectJob`, `updateJobRanking`, `triggerGeneration`, `markApplied`. Validam input no servidor e chamam `revalidatePath("/")`. |
+| `src/app/actions.ts` | **Server Actions** (`"use server"`): `rejectJob`, `undoRejectJob`, `updateJobRanking`, `triggerGeneration`, `markApplied`. Validam input no servidor e chamam `revalidatePath("/")`. |
 | `src/app/JobActions.tsx` | **Client Component** (fila): editar/rejeitar/gerar. Só importa funções de action — nunca o `PrismaClient`. |
+| `src/components/ToastHost.tsx` + `toast-bus.ts` | **Toast global** montado no layout. Pub/sub sem dep; sobrevive ao desmonte de cards (ex.: toast "Desfazer" da rejeição). |
 | `src/app/HistoryActions.tsx` | **Client Component** (histórico): botão "Marcar como aplicada" (`GENERATED → APPLIED`). |
 | `src/app/status.ts` | Constantes de status compartilhadas (server + client). |
 | `src/core/generator.ts` | Gerador de Cover Letter: prompt + chamada Ollama + artefato em disco. Server-only, usado por `actions.ts` e `page.tsx`. |
