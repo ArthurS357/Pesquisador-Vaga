@@ -3,10 +3,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { JobCard } from "./JobCard";
 import {
-  buildQuery, parseFilters, PAGE_SIZE,
+  buildQuery, parseFilters, PAGE_SIZE, QUEUE_STATUS_LIST,
   type JobFilterState, type RawParams, type SortKey,
 } from "@/app/view";
-import { JOB_STATUS } from "@/app/status";
 
 function orderFor(sort: SortKey): Prisma.JobOrderByWithRelationInput[] {
   switch (sort) {
@@ -78,11 +77,12 @@ export function queueFiltersWhere(state: JobFilterState): Prisma.JobWhereInput {
 export async function JobList({ searchParams }: { searchParams: RawParams }) {
   const state = parseFilters(searchParams);
 
-  // Facet de status: aba específica → aquele status; "Todas" (null) → tudo que
-  // é visível (menos INACTIVE), englobando fila ativa, aprovadas e histórico.
+  // Facet de status: aba específica → aquele status; "Todas" (null) → só a fila
+  // pendente de ação (ACTIVE + APPROVED). REJECTED/INACTIVE e os terminais de
+  // histórico (GENERATING/GENERATED/APPLIED) saem da fila — vivem no Histórico.
   const where: Prisma.JobWhereInput = {
     ...queueFiltersWhere(state),
-    status: state.status ?? { not: JOB_STATUS.INACTIVE },
+    status: state.status ?? { in: QUEUE_STATUS_LIST },
   };
 
   const [totalInDb, total, jobs] = await Promise.all([

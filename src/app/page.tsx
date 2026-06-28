@@ -30,9 +30,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Raw
 
   const queueWhere = { status: { in: QUEUE_STATUS_LIST } };
   // Contagens por status respeitando os filtros atuais (menos o próprio status):
-  // alimentam os badges das abas sem uma query extra por aba. "Todas" engloba a
-  // fila ativa + aprovadas + histórico (tudo menos INACTIVE) — não só a fila.
-  const countWhere = { ...queueFiltersWhere(current), status: { not: JOB_STATUS.INACTIVE } };
+  // alimentam os badges das abas sem uma query extra por aba. "Todas" = a fila
+  // pendente de ação (ACTIVE + APPROVED) — mesma regra do where de JobList, p/ o
+  // "Mostrando X de Y" bater exato. REJECTED e terminais ficam só no Histórico.
+  const countWhere = { ...queueFiltersWhere(current), status: { in: QUEUE_STATUS_LIST } };
   const [sourceRows, lensRows, history, statusGroups, allStatusGroups, dashboardRows] = await Promise.all([
     prisma.job.findMany({ where: queueWhere, select: { source: true }, distinct: ["source"], orderBy: { source: "asc" } }),
     prisma.job.findMany({ where: { ...queueWhere, lens: { not: null } }, select: { lens: true }, distinct: ["lens"], orderBy: { lens: "asc" } }),
