@@ -1,5 +1,7 @@
 import { collect } from "./core/engine";
-import { greenhouseAdapter } from "./adapters/greenhouse";
+// greenhouseAdapter desativado: nenhum board Greenhouse ativo no momento.
+// Reative o import junto com a(s) linha(s) de board abaixo quando voltar a usar.
+// import { greenhouseAdapter } from "./adapters/greenhouse";
 import { leverAdapter } from "./adapters/lever";
 import { ashbyAdapter } from "./adapters/ashby";
 import { emailAlertAdapter } from "./adapters/email";
@@ -14,7 +16,9 @@ dotenv.config();
 // ─────────────────────────────────────────────────────────────────────────────
 const BOARDS = [
   // ── Greenhouse ─────────────────────────────────────────────────────────────
-  greenhouseAdapter({ id: "stripe", name: "Stripe" }),
+  // Stripe desativado (a empresa Stripe saiu do foco da busca). "Stripe" aqui é
+  // só o board Greenhouse da empresa — nunca foi webhook/canal de pagamento.
+  // greenhouseAdapter({ id: "stripe", name: "Stripe" }),
   // greenhouseAdapter({ id: "airbnb", name: "Airbnb" }),
   // greenhouseAdapter({ id: "shopify", name: "Shopify" }),
   // greenhouseAdapter({ id: "zendesk", name: "Zendesk" }),
