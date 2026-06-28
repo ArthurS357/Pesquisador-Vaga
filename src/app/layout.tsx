@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import "./globals.css";
+import { ToastHost } from "@/components/ToastHost";
 
 export const metadata = {
   title: "Job Engine — Curadoria",
@@ -9,7 +10,12 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Host global de toasts: vive acima dos cards, sobrevive ao desmonte
+            de uma vaga rejeitada (que sai da fila no revalidate). */}
+        <ToastHost />
+      </body>
     </html>
   );
 }

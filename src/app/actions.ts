@@ -55,6 +55,29 @@ export async function rejectJob(id: string): Promise<ActionResult> {
   }
 }
 
+/**
+ * Desfaz a rejeição: REJECTED → ACTIVE. Alimenta a ação "Desfazer" do toast
+ * (janela de arrependimento imediato). Guard de transição: só reverte se a vaga
+ * ainda estiver REJECTED — evita ressuscitar algo que a curadoria já moveu adiante.
+ */
+export async function undoRejectJob(id: string): Promise<ActionResult> {
+  console.log("↩️ Server Action [undoRejectJob] recebida para ID:", id);
+  if (badId(id)) return { ok: false, error: "id inválido" };
+  try {
+    const job = await prisma.job.findUnique({ where: { id }, select: { status: true } });
+    if (!job) return { ok: false, error: "vaga não encontrada" };
+    if (job.status !== JOB_STATUS.REJECTED) {
+      return { ok: false, error: `transição inválida: ${job.status} → ACTIVE (esperado REJECTED)` };
+    }
+    await prisma.job.update({ where: { id }, data: { status: JOB_STATUS.ACTIVE } });
+    revalidatePath("/");
+    return { ok: true };
+  } catch (err) {
+    console.error("❌ Erro ao desfazer rejeição no SQLite:", err);
+    return { ok: false, error: err instanceof Error ? err.message : "falha ao desfazer rejeição" };
+  }
+}
+
 /** Edita score/lens manualmente. Valida no servidor — nunca confia no cliente. */
 export async function updateJobRanking(id: string, patch: RankingPatch): Promise<ActionResult> {
   if (badId(id)) return { ok: false, error: "id inválido" };

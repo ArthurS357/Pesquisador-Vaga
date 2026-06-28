@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
-  rejectJob, applyJob, updateJobRanking, triggerGeneration, revalidateJob, type ActionResult,
+  rejectJob, undoRejectJob, applyJob, updateJobRanking, triggerGeneration, revalidateJob,
+  type ActionResult,
 } from "./actions";
 import { HamburgerMenu, type MenuAction } from "@/components/HamburgerMenu";
+import { showToast } from "@/components/toast-bus";
 
 interface Props {
   id: string;
@@ -192,7 +194,30 @@ export function JobActions({
       // useOptimistic reverte sozinho ao fim da transition.
       onOptimisticStatus?.("REJECTED");
       const res = await rejectJob(id);
-      if (!res.ok) setToast({ msg: res.error, type: "error" });
+      if (!res.ok) {
+        setToast({ msg: res.error, type: "error" });
+        return;
+      }
+      // Sucesso: o revalidate tira a vaga da fila e ESTE card desmonta. Por isso o
+      // toast de "Desfazer" vai pro host global (toast-bus), não pro toast local —
+      // a closure de undo só usa funções de módulo, então sobrevive ao desmonte.
+      showToast({
+        msg: "Vaga rejeitada",
+        type: "info",
+        durationMs: 5000,
+        action: {
+          label: "Desfazer",
+          run: () => {
+            void undoRejectJob(id).then((r) => {
+              showToast(
+                r.ok
+                  ? { msg: "Rejeição desfeita — vaga de volta à fila", type: "success" }
+                  : { msg: r.error, type: "error" },
+              );
+            });
+          },
+        },
+      });
     });
   }
 

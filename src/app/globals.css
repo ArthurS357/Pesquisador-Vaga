@@ -602,6 +602,33 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
 .cleanup-toast-close { margin-left: auto; font-size: 0.75rem; opacity: 0.7; }
 .cleanup-toast-close:hover { opacity: 1; }
 
+/* Botão de ação do toast (ex.: "Desfazer"). margin-left:auto absorve o espaço
+   livre → ação encosta à direita e o ✕ (também auto) flui logo após ela. */
+.cleanup-toast-action {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.cleanup-toast-action:hover { opacity: 0.85; }
+
+/* Pilha de toasts do host global: fixa no canto, empilha de baixo p/ cima.
+   Os itens internos perdem o position:fixed individual e fluem na coluna. */
+.toast-stack {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+}
+.toast-stack .cleanup-toast { position: static; bottom: auto; right: auto; }
+
 @keyframes slide-in {
   from { opacity: 0; transform: translateY(0.5rem); }
   to   { opacity: 1; transform: translateY(0); }
