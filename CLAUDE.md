@@ -141,6 +141,14 @@ calibração (≈85 ideal / ≈55 médio / ≈15 bloqueado). Fallback heurístic
 `reasoning = null` → o card mostra o badge **"⚙️ Avaliação automática"**. `LLM_DEBUG=1` loga
 prompt + resposta crus para diagnóstico.
 
+**TTL do cache canônico** (`cache-ttl.ts` + `engine.ts`): o cache por `canonicalHash` deixou de ser
+eterno. `judgedAt` (campo do `Job`, carimbado **só** no veredito do LLM) guarda quando a vaga foi
+julgada; na coleta, um veredito mais velho que `CACHE_TTL_DAYS` (default 30, `0` = infinito) é
+ignorado e a vaga é reavaliada pelo judge atual. Legados (`judgedAt` null, julgados antes do campo)
+são reavaliados de forma espalhada: só se o anúncio (`updatedAt`) for mais velho que
+`CACHE_TTL_GRACE_DAYS` (default 7) — evita avalanche de reavaliação na 1ª coleta. Fallback heurístico
+preserva o `judgedAt` anterior (não foi veredito novo). Sem cron extra: acontece dentro do `runCollect`.
+
 > **WSL2 + ROCm não é necessário** e foi descartado: a RX 7600 é gfx1102, fora da lista
 > oficial de GPUs do ROCm, e o caminho via WSL não traria ganho sobre a config nativa acima.
 

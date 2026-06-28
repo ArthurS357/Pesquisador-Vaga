@@ -24,6 +24,7 @@ model Job {
   score         Float?                          // Ranker: pontuação do perfil
   lens          String?                         // Ranker: ex. "backend", "frontend", "devops"
   reasoning     String?                         // Ranker: justificativa do score/lens (curadoria humana)
+  judgedAt      DateTime?                        // Quando o LLM julgou (TTL de cache). Null = nunca/legado → reavaliar.
 
   @@unique([source, sourceId])
   @@index([company])

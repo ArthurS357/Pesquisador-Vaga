@@ -4,11 +4,20 @@ import { canonicalHash } from "./utils";
 import { rankJob } from "./ranker";
 import { judgeWithLlm } from "./llm-judge";
 import { HUMAN_OWNED_STATUSES } from "./db-clean-core";
+import { isCacheStale } from "./cache-ttl";
 import { prisma } from "../db/prisma";
 
 export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<Job[]> {
   const runStartTime = new Date();
   const all: Job[] = [];
+
+  // ── Política de TTL do cache canônico ────────────────────────────────────
+  // Lidas em RUNTIME (não no topo do módulo): dotenv.config() roda no index.ts
+  // DEPOIS dos imports, então env no escopo do módulo ainda estaria vazia.
+  const CACHE_TTL_DAYS = Number(process.env.CACHE_TTL_DAYS ?? 30);
+  const CACHE_TTL_GRACE_DAYS = Number(process.env.CACHE_TTL_GRACE_DAYS ?? 7);
+  const cacheDebug = process.env.LLM_DEBUG === "1" || process.env.LLM_DEBUG === "true";
+  const nowMs = runStartTime.getTime();
 
   // ── Janela incremental para adapters baseados em e-mail ───────────────────
   // Ponto de partida do IMAP SINCE = data do e-mail mais recente já persistido.
@@ -73,6 +82,8 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     score: number | null;
     lens: string | null;
     reasoning: string | null;
+    updatedAt: Date | null;
+    judgedAt: Date | null;
   };
 
   const hashes = [
@@ -92,6 +103,7 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
         select: {
           source: true, sourceId: true, status: true,
           canonicalHash: true, score: true, lens: true, reasoning: true,
+          updatedAt: true, judgedAt: true,
         },
       })
     : [];
@@ -146,22 +158,36 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     // reasoning null e NÃO entram no cache — senão, uma run com Ollama fora
     // "envenenaria" o hash e barraria o julgamento LLM de vagas irmãs quando o
     // Ollama voltasse.
-    // Cache por canonicalHash agora sai do mapa em memória (zero query).
+    // Estado atual desta vaga (mesma chave composta) — usado p/ judgedAt e status.
+    const existing = existingByKey.get(`${job.source}:${job.sourceId}`);
+
+    // Cache por canonicalHash (zero query — mapa em memória). IGNORADO se o
+    // veredito estiver velho (TTL): força reavaliação pelo judge atual.
     const cached = existingByHash.get(hash);
+    const cacheUsable = cached?.score !== null && cached?.score !== undefined;
+    const cacheStale =
+      cached !== undefined &&
+      isCacheStale(cached.judgedAt, cached.updatedAt, nowMs, CACHE_TTL_DAYS, CACHE_TTL_GRACE_DAYS);
 
     let finalScore = heuristic.score;
     let finalLens = heuristic.lens;
     // Justificativa do LLM (Estágio 2). Heurística pura não gera reasoning.
     let finalReasoning: string | null = null;
+    // Quando o LLM julgou (TTL). Carimbado só em veredito real do LLM.
+    let finalJudgedAt: Date | null = null;
 
-    if (cached?.score !== null && cached?.score !== undefined) {
-      // Estágio 2 skip: usa score em cache
-      finalScore = cached.score;
-      finalLens = cached.lens ?? heuristic.lens;
-      finalReasoning = cached.reasoning ?? null;
+    if (cacheUsable && !cacheStale) {
+      // Estágio 2 skip: usa score em cache (dentro do TTL)
+      finalScore = cached!.score!;
+      finalLens = cached!.lens ?? heuristic.lens;
+      finalReasoning = cached!.reasoning ?? null;
+      finalJudgedAt = cached!.judgedAt; // herda a idade do veredito em cache
       countCacheHit++;
       console.info(`  ✦ [CACHE] "${job.title}" @ ${job.company} (score=${finalScore}, lens=${finalLens})`);
     } else {
+      if (cacheUsable && cacheStale && cacheDebug) {
+        console.debug(`  [cache] stale (>${CACHE_TTL_DAYS}d), re-evaluating ${hash}`);
+      }
       // Estágio 2: LLM Judge via Ollama
       console.info(`  → [LLM] Avaliando "${job.title}" @ ${job.company}...`);
       const llmResult = await judgeWithLlm(
@@ -174,10 +200,13 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
         finalScore = llmResult.score;
         finalLens = llmResult.lens;
         finalReasoning = llmResult.reasoning;
+        finalJudgedAt = runStartTime; // veredito fresco → carimba agora
         countLlmJudged++;
         console.info(`  ✓ [LLM] score=${finalScore}, lens=${finalLens} — ${llmResult.reasoning}`);
       } else {
-        // Ollama offline ou JSON inválido → usa heurística como fallback
+        // Ollama offline ou JSON inválido → usa heurística como fallback.
+        // Preserva o judgedAt anterior: não houve veredito novo do LLM.
+        finalJudgedAt = existing?.judgedAt ?? null;
         console.info(`  ↩ [FALLBACK] "${job.title}" — usando score heurístico ${finalScore}`);
       }
     }
@@ -186,8 +215,8 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     // Regra: o motor só altera status para ACTIVE se a vaga for nova ou estiver
     // INACTIVE (ressurreição). Se o humano já classificou (APPROVED/REJECTED/
     // GENERATING/APPLIED), o motor NÃO tem autoridade para sobrescrever.
-    // Status humano agora sai do mapa em memória (zero query).
-    const existing = existingByKey.get(`${job.source}:${job.sourceId}`);
+    // Status humano agora sai do mapa em memória (zero query). `existing` já
+    // foi resolvido acima (reusado p/ judgedAt do fallback).
     const nextStatus =
       existing && (HUMAN_OWNED_STATUSES as readonly string[]).includes(existing.status)
         ? existing.status // mantém a decisão humana intacta
@@ -209,6 +238,7 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
         score: finalScore,
         lens: finalLens,
         reasoning: finalReasoning,
+        judgedAt: finalJudgedAt,
       },
       create: {
         source: job.source,
@@ -225,6 +255,7 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
         score: finalScore,
         lens: finalLens,
         reasoning: finalReasoning,
+        judgedAt: finalJudgedAt,
       },
     }));
 
@@ -238,6 +269,8 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
       score: finalScore,
       lens: finalLens,
       reasoning: finalReasoning,
+      updatedAt: job.updatedAt ?? null,
+      judgedAt: finalJudgedAt,
     };
     existingByKey.set(`${job.source}:${job.sourceId}`, writtenRow);
     if (finalReasoning !== null && finalScore !== null && !existingByHash.has(hash)) {
