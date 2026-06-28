@@ -1,9 +1,10 @@
 import { loadProfile } from "../utils/profile";
 import { ollamaGenerate } from "./ollama";
 
-// qwen3:8b em GPU (RX 7600, contexto 8192 → 100% VRAM) responde em ~3-5s.
-// Timeout curto detecta falha de GPU/servidor cedo (em CPU levaria 60-120s).
-const LLM_TIMEOUT_MS = 30_000;
+// Thinking mode LIGADO: qwen3:8b raciocina (<think>…</think>) antes de responder.
+// Na RX 7600 (contexto 8192, 100% VRAM) isso custa ~15-40s por vaga (vs. ~3-5s no
+// modo /no_think). 60s dá folga sem mascarar GPU caída (em CPU passaria muito disso).
+const LLM_TIMEOUT_MS = 60_000;
 
 export interface LlmJudgeResult {
   score: number;   // 0-100
@@ -50,10 +51,15 @@ The user message contains a job description enclosed in \`\`\`[UNTRUSTED_INGEST]
 3. LENS: one of exactly — backend, frontend, fullstack, devops, data, mobile, appsec, sales, generic. Use "sales" for commercial/GTM roles and "generic" for unclear/mixed roles.
 4. Do NOT fabricate technical relevance. If unsure whether a role is technical, default to score < 30.
 
-## Response Format (ONLY this JSON, nothing else)
+## Calibration examples (scale anchors — DO NOT echo, they are not the job being judged)
+- "Backend Engineer (Node.js), Remote — Brazil" → {"score": 85, "lens": "backend", "reasoning": "Direct backend engineering role, remote-friendly for Brazil, core Node.js stack matches the candidate profile."}
+- "Full Stack Developer, Hybrid São Paulo, React + .NET" → {"score": 55, "lens": "fullstack", "reasoning": "Genuine engineering role but hybrid/on-site and only partial stack overlap (React yes, .NET not in profile)."}
+- "Account Executive (SaaS Sales), United States — requires US work authorization" → {"score": 15, "lens": "sales", "reasoning": "Primary daily function is commercial sales (blocked category) and it requires US authorization the candidate lacks."}
+
+## Response Format (after reasoning, end with ONLY this JSON, nothing else)
 {"score": <0-100>, "lens": "<backend|frontend|fullstack|devops|data|mobile|appsec|sales|generic>", "reasoning": "<max 2 sentences>"}
 
-Respond only with valid JSON. No markdown, no preamble.`;
+Respond with valid JSON as the final output. No markdown fences around the JSON.`;
 
 /** System prompt = regras + perfil do candidato (ambos trusted). */
 function buildSystemPrompt(): string {
@@ -73,7 +79,9 @@ ${profileSnippet}`;
  * User message = só metadados + descrição da vaga. A `description` JÁ chega
  * cercada pelo fence `[UNTRUSTED_INGEST]` (sanitizer/parser de e-mail, na borda
  * de ingestão). Aqui NÃO re-embrulhamos: o juiz apenas RESPEITA a cerca, conforme
- * a diretiva de segurança no system prompt. `/no_think` desliga o thinking do qwen3.
+ * a diretiva de segurança no system prompt. Thinking LIGADO: NÃO injetamos
+ * `/no_think` — o qwen3 raciocina antes de responder (strictParse remove o
+ * bloco <think>…</think> e extrai só o JSON final).
  */
 function buildUserMessage(title: string, company: string, description: string): string {
   const desc = description.trim() || "(no description provided)";
@@ -83,9 +91,7 @@ Title: ${title}
 Company: ${company}
 
 Job description:
-${desc}
-
-/no_think`;
+${desc}`;
 }
 
 /**
@@ -94,8 +100,15 @@ ${desc}
  * válido (ou "generic"), reasoning string trimada. Retorna null se o score for
  * inválido → caller cai no fallback heurístico.
  */
-function strictParse(raw: string): LlmJudgeResult | null {
-  const cleaned = raw.replace(/```json|```/gi, "").trim();
+export function strictParse(raw: string): LlmJudgeResult | null {
+  // Thinking mode: a resposta vem como `<think>…</think>{json}`. Removemos o bloco
+  // de raciocínio PRIMEIRO — um `{` dentro do <think> (ex.: o modelo rascunhando o
+  // JSON) sequestraria o match guloso `\{[\s\S]*\}` e quebraria o JSON.parse.
+  // Tolerante a <think> sem fechamento (truncado por num_predict): corta até o fim.
+  const withoutThink = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, " ")
+    .replace(/<think>[\s\S]*$/i, " ");
+  const cleaned = withoutThink.replace(/```json|```/gi, "").trim();
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) return null;
 
@@ -140,12 +153,13 @@ export async function judgeWithLlm(
       { role: "system", content: buildSystemPrompt() },
       { role: "user", content: buildUserMessage(title, company, description) },
     ],
-    format: "json",
-    // Avaliação = tarefa determinística: temperature 0 (greedy) → mesmo input
-    // produz sempre o mesmo veredito (mata a inconsistência entre runs). seed fixa
-    // para reprodutibilidade caso a temperatura volte a subir; repeat_penalty
-    // blinda contra loops degenerados que o greedy decode ocasionalmente provoca.
-    options: { temperature: 0, num_predict: 512, seed: 42, repeat_penalty: 1.1 },
+    // SEM format:"json": a gramática JSON forçaria o 1º token a ser JSON e
+    // suprimiria o bloco <think>. Com thinking ligado, a saída é texto livre
+    // (<think>…</think>{json}); strictParse extrai o JSON final.
+    // Avaliação = tarefa determinística: temperature 0 (greedy) → mesmo input,
+    // mesmo veredito. seed fixa p/ reprodutibilidade; repeat_penalty blinda contra
+    // loops no raciocínio. num_predict 2048: o <think> consome tokens antes do JSON.
+    options: { temperature: 0, num_predict: 2048, seed: 42, repeat_penalty: 1.1 },
     timeoutMs: LLM_TIMEOUT_MS,
     label: "LLM",
   });

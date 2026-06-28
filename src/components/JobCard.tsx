@@ -74,11 +74,20 @@ export function JobCard({ job }: { job: Job }) {
       <div className="company">{job.company}</div>
       {job.location && <div className="meta">{job.location}</div>}
 
-      {job.reasoning && (
+      {job.reasoning ? (
         <details className="reasoning">
           <summary aria-label="Mostrar justificativa do score">Justificativa</summary>
           <p className="reasoning-body">{job.reasoning}</p>
         </details>
+      ) : (
+        // Sem reasoning = score veio da heurística local (Ollama estava offline na
+        // avaliação). Sinaliza ao curador que vale "Reavaliar" para julgar com o LLM.
+        <span
+          className="badge badge-auto"
+          title="Avaliada pela heurística local — o Ollama estava offline no momento. Use 'Reavaliar' para um veredito do LLM."
+        >
+          ⚙️ Avaliação automática
+        </span>
       )}
 
       <JobActions

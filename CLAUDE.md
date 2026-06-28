@@ -130,6 +130,16 @@ npm run ollama:status   # mostra modelos + onde o modelo carregado roda (deve di
 | Inferência voltou a 60-120s | GPU não está sendo usada — quase sempre é o contexto. Rode `npm run ollama:status`. |
 | `Servidor: OFFLINE` | `npm run ollama:start`. |
 | Driver AMD desatualizado | Atualize o Adrenalin; a build atual (`32.0.31019+`) funciona. |
+| Avaliação leva ~15-40s/vaga | **Esperado**: o juiz roda com *thinking* ligado (qwen3 raciocina antes de responder). Trade-off consciente — qualidade > velocidade. Timeout do judge = 60s. |
+
+### Juiz LLM (`llm-judge.ts`) — thinking ligado
+
+O juiz **não** usa `/no_think` nem `format:"json"`: o qwen3 emite `<think>…</think>{json}` e
+`strictParse` remove o bloco de raciocínio antes de extrair o JSON final. `temperature: 0`
+(+ `seed`/`repeat_penalty`) torna o veredito determinístico; o system prompt traz few-shot de
+calibração (≈85 ideal / ≈55 médio / ≈15 bloqueado). Fallback heurístico (Ollama offline) grava
+`reasoning = null` → o card mostra o badge **"⚙️ Avaliação automática"**. `LLM_DEBUG=1` loga
+prompt + resposta crus para diagnóstico.
 
 > **WSL2 + ROCm não é necessário** e foi descartado: a RX 7600 é gfx1102, fora da lista
 > oficial de GPUs do ROCm, e o caminho via WSL não traria ganho sobre a config nativa acima.

@@ -316,6 +316,15 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--text); }
 .lens-mobile    { background: #2c1326; color: #f9a8d4; }
 .lens-generic   { background: var(--surface-2); color: var(--text-dim); }
 .status-pill { background: var(--surface-2); color: var(--text-dim); border-color: var(--border); }
+/* Badge de avaliação heurística (sem reasoning do LLM). Discreto, tracejado p/
+   distingui-lo dos badges "fortes" de score/lens e sinalizar provisoriedade. */
+.badge-auto {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+  align-self: flex-start;
+  cursor: help;
+}
 
 /* ── Reasoning disclosure (nativo, acessível) ─────────── */
 .reasoning { border-top: 1px solid var(--border); padding-top: 0.5rem; }
