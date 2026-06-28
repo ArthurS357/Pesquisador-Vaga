@@ -178,8 +178,14 @@ export function JobActions({
   }
 
   function reject(): void {
+    // Guard: id vazio/undefined nunca chega na Server Action (evita update no-op).
+    if (typeof id !== "string" || id.trim() === "") {
+      setToast({ msg: "id da vaga inválido", type: "error" });
+      return;
+    }
     if (!confirm("Rejeitar esta vaga?")) return;
     setError(null);
+    console.log("⚡ [Client] Disparando transição de rejeição para:", id);
     startTransition(async () => {
       // Otimista: card escurece na hora (dentro da transition). Em caso de erro,
       // rejectJob NÃO chama revalidatePath → o status base volta a valer e o

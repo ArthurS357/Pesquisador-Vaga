@@ -156,8 +156,14 @@ export function HamburgerMenu({ actions, label, disabled = false }: Props) {
             className={`hamburger-item${a.variant === "danger" ? " hamburger-item-danger" : ""}`}
             disabled={a.disabled}
             onClick={() => {
-              setOpen(false);
-              a.onSelect();
+              // Dispara a ação ANTES de fechar: o handler (confirm + startTransition)
+              // roda com o nó ainda montado, sem corrida com a desmontagem do portal.
+              // `finally` garante que o menu sempre fecha, mesmo se onSelect lançar.
+              try {
+                a.onSelect();
+              } finally {
+                setOpen(false);
+              }
             }}
           >
             <span className="hamburger-item-icon" aria-hidden="true">{a.icon}</span>

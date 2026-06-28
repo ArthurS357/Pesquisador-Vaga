@@ -39,16 +39,19 @@ function badId(id: unknown): id is string {
 
 /** Rejeita a vaga: status → REJECTED. */
 export async function rejectJob(id: string): Promise<ActionResult> {
+  console.log("📥 Server Action [rejectJob] recebida para ID:", id);
   if (badId(id)) return { ok: false, error: "id inválido" };
   try {
     await prisma.job.update({
       where: { id },
       data: { status: JOB_STATUS.REJECTED },
     });
+    // revalidatePath só roda APÓS o update resolver — a fila reflete o REJECTED.
     revalidatePath("/");
     return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "falha ao rejeitar" };
+  } catch (err) {
+    console.error("❌ Erro ao rejeitar vaga no SQLite:", err);
+    return { ok: false, error: err instanceof Error ? err.message : "falha ao rejeitar" };
   }
 }
 
