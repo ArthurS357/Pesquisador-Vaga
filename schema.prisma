@@ -25,6 +25,9 @@ model Job {
   lens          String?                         // Ranker: ex. "backend", "frontend", "devops"
   reasoning     String?                         // Ranker: justificativa do score/lens (curadoria humana)
   judgedAt      DateTime?                        // Quando o LLM julgou (TTL de cache). Null = nunca/legado → reavaliar.
+  judgeSource   String?                          // Proveniência do score atual: "ollama-qwen3" | "heuristic"
+  judgeModel    String?                          // Modelo do veredito LLM (OLLAMA_MODEL). Null no fallback heurístico.
+  judgeLatencyMs Int?                            // Latência da inferência do juiz em ms (debug/eval).
 
   @@unique([source, sourceId])
   @@index([company])
