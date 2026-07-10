@@ -19,6 +19,8 @@ export const MAX_DESCRIPTION_CHARS = 6000;
 /** Marcadores de fronteira do bloco não-confiável (consumidos pelo prompt da IA). */
 const FENCE_OPEN = "```[UNTRUSTED_INGEST]";
 const FENCE_CLOSE = "```";
+/** Grave modifier letter (U+02CB): neutraliza crases do conteúdo sem quebrar a cerca. */
+const SAFE_BACKTICK = "ˋ";
 
 /** Remove blocos <script>/<style> (conteúdo incluso) e qualquer outra tag crua. */
 function stripTags(html: string): string {
@@ -58,5 +60,10 @@ export function sanitizeJobDescription(raw: string): string {
   const capped =
     cleaned.length > MAX_DESCRIPTION_CHARS ? cleaned.slice(0, MAX_DESCRIPTION_CHARS).trimEnd() : cleaned;
 
-  return `\n${FENCE_OPEN}\n${capped}\n${FENCE_CLOSE}\n`;
+  // Escapa crases do conteúdo ANTES do wrap: um ``` na vaga fecharia a cerca e
+  // exporia o system prompt do juiz a injection (Blueprint D). Só o conteúdo é
+  // neutralizado — os marcadores FENCE_* seguem com crases reais.
+  const fenced = capped.replace(/`/g, SAFE_BACKTICK);
+
+  return `\n${FENCE_OPEN}\n${fenced}\n${FENCE_CLOSE}\n`;
 }
