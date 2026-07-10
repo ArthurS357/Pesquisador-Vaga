@@ -1,0 +1,29 @@
+[
+  {
+    "id": "manual-001",
+    "title": "Senior Backend Engineer (Node.js)",
+    "company": "Vercel",
+    "description": "Build and scale TypeScript/Node.js services and public APIs. Remote-friendly for Brazil. Core stack: Node.js, PostgreSQL, TypeScript.",
+    "expectedScore": 85,
+    "expectedDecision": "apply",
+    "expectedLens": "backend"
+  },
+  {
+    "id": "manual-002",
+    "title": "Full Stack Developer (React + .NET)",
+    "company": "Contoso",
+    "description": "Hybrid role in São Paulo. Frontend in React, backend in C#/.NET. Some on-site days required.",
+    "expectedScore": 55,
+    "expectedDecision": "apply",
+    "expectedLens": "fullstack"
+  },
+  {
+    "id": "manual-003",
+    "title": "Account Executive (SaaS Sales)",
+    "company": "Salesforce",
+    "description": "Own the full sales cycle for enterprise accounts. Requires US work authorization. Primary function is commercial revenue generation.",
+    "expectedScore": 15,
+    "expectedDecision": "skip",
+    "expectedLens": "sales"
+  }
+]
