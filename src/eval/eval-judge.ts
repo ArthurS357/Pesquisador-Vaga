@@ -1,6 +1,6 @@
 /**
  * Harness de avaliação do juiz LLM (esqueleto).
- * Uso: npm run eval:judge
+ * Uso: npm run eval:judge [-- <baseline-out.json>]
  *
  * Roda o `judgeWithLlm` sobre um golden set fixo e mede desvio de score (MAE),
  * acurácia de decisão e acurácia de lens. Mirror do caminho de produção: a
@@ -8,8 +8,9 @@
  *
  * Sem Ollama no ar, cada item cai em OFFLINE (judge → null) e sai das métricas —
  * a estrutura roda mesmo assim. Popule `golden-set.json` para ampliar a cobertura.
+ * Com um caminho de saída, grava o snapshot de baseline (métricas + itens) em JSON.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as dotenv from "dotenv";
 import { judgeWithLlm } from "../core/llm-judge";
@@ -42,6 +43,8 @@ interface EvalRow {
   expectedScore: number;
   expectedDecision: Decision;
   expectedLens: string;
+  latencyMs: number;
+  reasoning: string | null;
 }
 
 function decisionFor(score: number): Decision {
@@ -62,7 +65,9 @@ async function main(): Promise<void> {
   const rows: EvalRow[] = [];
   for (const item of golden) {
     const fenced = sanitizeJobDescription(item.description);
+    const startedAt = Date.now();
     const result = await judgeWithLlm(item.title, item.company, fenced);
+    const latencyMs = Date.now() - startedAt;
     rows.push({
       id: item.id,
       offline: result === null,
@@ -72,6 +77,8 @@ async function main(): Promise<void> {
       expectedScore: item.expectedScore,
       expectedDecision: item.expectedDecision,
       expectedLens: item.expectedLens,
+      latencyMs,
+      reasoning: result?.reasoning ?? null,
     });
   }
 
@@ -95,12 +102,43 @@ async function main(): Promise<void> {
     judged.reduce((sum, r) => sum + Math.abs((r.actualScore ?? 0) - r.expectedScore), 0) / judged.length;
   const decHits = judged.filter((r) => r.actualDecision === r.expectedDecision).length;
   const lensHits = judged.filter((r) => r.actualLens === r.expectedLens).length;
+  const avgLatencyMs = Math.round(judged.reduce((sum, r) => sum + r.latencyMs, 0) / judged.length);
 
   console.log("\n[eval] Métricas (sobre itens avaliados):");
   console.log(`  Avaliados:          ${judged.length}/${rows.length}`);
   console.log(`  MAE de score:       ${mae.toFixed(1)}`);
   console.log(`  Acurácia decisão:   ${((decHits / judged.length) * 100).toFixed(0)}% (${decHits}/${judged.length})`);
-  console.log(`  Acurácia lens:      ${((lensHits / judged.length) * 100).toFixed(0)}% (${lensHits}/${judged.length})\n`);
+  console.log(`  Acurácia lens:      ${((lensHits / judged.length) * 100).toFixed(0)}% (${lensHits}/${judged.length})`);
+  console.log(`  Latência média:     ${avgLatencyMs}ms\n`);
+
+  // Snapshot de baseline: `npm run eval:judge -- <arquivo.json>` grava métricas + itens.
+  const outPath = process.argv[2];
+  if (outPath) {
+    const baseline = {
+      date: new Date().toISOString().slice(0, 10),
+      model: OLLAMA_MODEL,
+      goldenSetSize: rows.length,
+      metrics: {
+        mae: Number(mae.toFixed(2)),
+        decisionAccuracy: Number((decHits / judged.length).toFixed(2)),
+        lensAccuracy: Number((lensHits / judged.length).toFixed(2)),
+        avgLatencyMs,
+      },
+      items: rows.map((r) => ({
+        id: r.id,
+        expectedScore: r.expectedScore,
+        gotScore: r.actualScore,
+        expectedDecision: r.expectedDecision,
+        gotDecision: r.actualDecision,
+        expectedLens: r.expectedLens,
+        gotLens: r.actualLens,
+        latencyMs: r.latencyMs,
+        reasoning: r.reasoning,
+      })),
+    };
+    writeFileSync(outPath, JSON.stringify(baseline, null, 2) + "\n", "utf-8");
+    console.log(`[eval] Baseline gravada em ${outPath}\n`);
+  }
 }
 
 main().catch((err) => {
