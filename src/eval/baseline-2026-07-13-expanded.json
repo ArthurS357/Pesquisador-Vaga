@@ -1,0 +1,178 @@
+{
+  "date": "2026-07-13",
+  "model": "qwen3:8b",
+  "goldenSetSize": 15,
+  "metrics": {
+    "mae": 13.13,
+    "decisionAccuracy": 0.87,
+    "lensAccuracy": 0.93,
+    "avgLatencyMs": 14280
+  },
+  "items": [
+    {
+      "id": "manual-001",
+      "expectedScore": 85,
+      "gotScore": 85,
+      "expectedDecision": "apply",
+      "gotDecision": "apply",
+      "expectedLens": "backend",
+      "gotLens": "backend",
+      "latencyMs": 32720,
+      "reasoning": "Direct backend engineering role matching Node.js/TypeScript stack. Core technologies (Node.js, PostgreSQL) align with candidate's expertise in backend development and database interactions."
+    },
+    {
+      "id": "manual-002",
+      "expectedScore": 55,
+      "gotScore": 55,
+      "expectedDecision": "apply",
+      "gotDecision": "apply",
+      "expectedLens": "fullstack",
+      "gotLens": "fullstack",
+      "latencyMs": 16012,
+      "reasoning": "Genuine engineering role but partial stack overlap (React yes, .NET not in profile). Hybrid/on-site requirement adds logistical complexity."
+    },
+    {
+      "id": "manual-003",
+      "expectedScore": 15,
+      "gotScore": 15,
+      "expectedDecision": "skip",
+      "gotDecision": "skip",
+      "expectedLens": "sales",
+      "gotLens": "sales",
+      "latencyMs": 10717,
+      "reasoning": "Primary function is commercial revenue generation (blocked Sales category) and requires US work authorization the candidate lacks."
+    },
+    {
+      "id": "db-cmqxyhq680012ixoyq9s59obt",
+      "expectedScore": 75,
+      "gotScore": 85,
+      "expectedDecision": "apply",
+      "gotDecision": "apply",
+      "expectedLens": "fullstack",
+      "gotLens": "fullstack",
+      "latencyMs": 9990,
+      "reasoning": "Direct software engineering role matching Node.js/React stack. Candidate's Full Stack expertise aligns with junior development focus."
+    },
+    {
+      "id": "db-cmqxyhq8m001lixoynfnlswlv",
+      "expectedScore": 80,
+      "gotScore": 85,
+      "expectedDecision": "apply",
+      "gotDecision": "apply",
+      "expectedLens": "frontend",
+      "gotLens": "frontend",
+      "latencyMs": 17255,
+      "reasoning": "Direct frontend engineering role matching React/TypeScript expertise."
+    },
+    {
+      "id": "db-cmqxyhq690019ixoyla4cafr1",
+      "expectedScore": 70,
+      "gotScore": 85,
+      "expectedDecision": "apply",
+      "gotDecision": "apply",
+      "expectedLens": "fullstack",
+      "gotLens": "fullstack",
+      "latencyMs": 22805,
+      "reasoning": "Primary function is Full Stack development (engineering role), aligns with candidate's Node.js/React/TypeScript expertise. Cyber Security mention adds security audit relevance but doesn't override the core engineering focus."
+    },
+    {
+      "id": "db-cmqxyhq8m001jixoymqf0qfvt",
+      "expectedScore": 70,
+      "gotScore": 85,
+      "expectedDecision": "apply",
+      "gotDecision": "apply",
+      "expectedLens": "fullstack",
+      "gotLens": "fullstack",
+      "latencyMs": 13512,
+      "reasoning": "Direct full stack engineering role matching the candidate's Node.js/React/TypeScript expertise. No blocked category detected despite junior level."
+    },
+    {
+      "id": "db-cmqxyhq69001bixoykev5arod",
+      "expectedScore": 65,
+      "gotScore": 18,
+      "expectedDecision": "apply",
+      "gotDecision": "skip",
+      "expectedLens": "appsec",
+      "gotLens": "appsec",
+      "latencyMs": 12152,
+      "reasoning": "Primary function falls into blocked Legal/Compliance/Privacy category (Application Security). Candidate's profile includes AppSec experience but this role is non-technical compliance audit rather than engineering/security development."
+    },
+    {
+      "id": "db-cmqxyhq69001aixoyjofanjlr",
+      "expectedScore": 65,
+      "gotScore": 85,
+      "expectedDecision": "apply",
+      "gotDecision": "apply",
+      "expectedLens": "frontend",
+      "gotLens": "frontend",
+      "latencyMs": 11249,
+      "reasoning": "Direct front-end engineering role matching React/TypeScript expertise in candidate's profile. No blocked categories detected."
+    },
+    {
+      "id": "db-cmqxyhq690018ixoylodq14z9",
+      "expectedScore": 55,
+      "gotScore": 15,
+      "expectedDecision": "apply",
+      "gotDecision": "skip",
+      "expectedLens": "backend",
+      "gotLens": "generic",
+      "latencyMs": 11814,
+      "reasoning": "Job title 'Analista de Desenvolvimento Júnior' falls under non-technical operations role (blocked category). Python mention is irrelevant to primary function of junior analyst work."
+    },
+    {
+      "id": "db-cmqxyhq680014ixoyp2tzjv4i",
+      "expectedScore": 25,
+      "gotScore": 15,
+      "expectedDecision": "skip",
+      "gotDecision": "skip",
+      "expectedLens": "generic",
+      "gotLens": "generic",
+      "latencyMs": 12045,
+      "reasoning": "Primary function is non-technical support operations (blocked category), no engineering/technical alignment with candidate's Full Stack/AppSec focus."
+    },
+    {
+      "id": "db-cmqxyhq68000yixoyvamisfrd",
+      "expectedScore": 25,
+      "gotScore": 15,
+      "expectedDecision": "skip",
+      "gotDecision": "skip",
+      "expectedLens": "generic",
+      "gotLens": "generic",
+      "latencyMs": 9534,
+      "reasoning": "Job title implies talent acquisition/HR role (blocked category) with no description provided to confirm technical relevance."
+    },
+    {
+      "id": "db-cmqxyhq680013ixoy840yt51r",
+      "expectedScore": 15,
+      "gotScore": 15,
+      "expectedDecision": "skip",
+      "gotDecision": "skip",
+      "expectedLens": "generic",
+      "gotLens": "generic",
+      "latencyMs": 10360,
+      "reasoning": "Primary function is IT management (non-technical operations role) which falls under blocked category. No description provided to clarify technical aspects or responsibilities."
+    },
+    {
+      "id": "db-cmqjj53vg000mqcsig2wcgnqc",
+      "expectedScore": 15,
+      "gotScore": 25,
+      "expectedDecision": "skip",
+      "gotDecision": "skip",
+      "expectedLens": "generic",
+      "gotLens": "generic",
+      "latencyMs": 11247,
+      "reasoning": "Job title mentions 'Tecnologia' but lacks specific technical details or role description to confirm engineering/technical function. Internship roles often fall into non-technical categories without explicit technical responsibilities."
+    },
+    {
+      "id": "db-cmqlf7vis001jercbgyag8lt8",
+      "expectedScore": 10,
+      "gotScore": 25,
+      "expectedDecision": "skip",
+      "gotDecision": "skip",
+      "expectedLens": "generic",
+      "gotLens": "generic",
+      "latencyMs": 12792,
+      "reasoning": "The job description appears to be an incomplete email template rather than a valid position. No technical role or responsibilities are specified, making it impossible to assess fit with the candidate's engineering profile."
+    }
+  ]
+}
