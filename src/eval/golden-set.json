@@ -25,5 +25,125 @@
     "expectedScore": 15,
     "expectedDecision": "skip",
     "expectedLens": "sales"
+  },
+  {
+    "id": "db-cmqxyhq680012ixoyq9s59obt",
+    "title": "JR Software Engineer (Node.JS/React) - Indaiatuba/SP",
+    "company": "John Deere",
+    "description": "",
+    "expectedScore": 75,
+    "expectedDecision": "apply",
+    "expectedLens": "fullstack",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqxyhq8m001lixoynfnlswlv",
+    "title": "Frontend Engineer, Quality Platform",
+    "company": "Airbnb",
+    "description": "",
+    "expectedScore": 80,
+    "expectedDecision": "apply",
+    "expectedLens": "frontend",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqxyhq690019ixoyla4cafr1",
+    "title": "Desenvolvedor(a) Fullstack Júnior – (Cyber Security)",
+    "company": "AB InBev",
+    "description": "",
+    "expectedScore": 70,
+    "expectedDecision": "apply",
+    "expectedLens": "fullstack",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqxyhq8m001jixoymqf0qfvt",
+    "title": "Pessoa Desenvolvedora FullStack - Junior",
+    "company": "FCamara",
+    "description": "",
+    "expectedScore": 70,
+    "expectedDecision": "apply",
+    "expectedLens": "fullstack",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqxyhq69001bixoykev5arod",
+    "title": "Estágio em Application Security",
+    "company": "Avenue",
+    "description": "",
+    "expectedScore": 65,
+    "expectedDecision": "apply",
+    "expectedLens": "appsec",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqxyhq69001aixoyjofanjlr",
+    "title": "Desenvolvedor de front-end",
+    "company": "Stefanini Brasil",
+    "description": "",
+    "expectedScore": 65,
+    "expectedDecision": "apply",
+    "expectedLens": "frontend",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqxyhq690018ixoylodq14z9",
+    "title": "Analista de Desenvolvimento Júnior - Python",
+    "company": "Ibope",
+    "description": "",
+    "expectedScore": 55,
+    "expectedDecision": "apply",
+    "expectedLens": "backend",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqxyhq680014ixoyp2tzjv4i",
+    "title": "11500904 - TÉCNICO DE SUPORTE JÚNIOR",
+    "company": "QUALITY SOFTWARE S/A",
+    "description": "",
+    "expectedScore": 25,
+    "expectedDecision": "skip",
+    "expectedLens": "generic",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqxyhq68000yixoyvamisfrd",
+    "title": "Banco de Talentos – Indique ou Candidate-se 🚀",
+    "company": "Nomad",
+    "description": "",
+    "expectedScore": 25,
+    "expectedDecision": "skip",
+    "expectedLens": "generic",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqxyhq680013ixoy840yt51r",
+    "title": "Gerente De TI",
+    "company": "Empresa confidencial",
+    "description": "",
+    "expectedScore": 15,
+    "expectedDecision": "skip",
+    "expectedLens": "generic",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqjj53vg000mqcsig2wcgnqc",
+    "title": "Estágio Em Tecnologia - EBA Benefícios",
+    "company": "INSTITUTO NACIONAL TALENTOS DE INCLUSAO PROFISSIONAL - INTAL",
+    "description": "",
+    "expectedScore": 15,
+    "expectedDecision": "skip",
+    "expectedLens": "generic",
+    "curation": "draft-2026-07-13"
+  },
+  {
+    "id": "db-cmqlf7vis001jercbgyag8lt8",
+    "title": "Candidatura recebida. Obrigado por se candidatar à vaga!!",
+    "company": "iK Ecossistema da Inovação",
+    "description": "@media only screen and (max-width:580px){table.body img{width:auto!important;height:auto!important}table.body center{min-width:0!important}table.body .container{width:95%!important}table.body .column,table.body .columns{height:auto!important;-moz-box-sizing:border-box;-webkit-box-sizing:border-box;box-sizing:border-box;padding-left:16px!important;padding-right:16px!important}table.body .collapse .column,table.body .collapse .columns{padding-left:0!important;padding-right:0!important}td.small-1,t",
+    "expectedScore": 10,
+    "expectedDecision": "skip",
+    "expectedLens": "generic",
+    "curation": "draft-2026-07-13"
   }
 ]
