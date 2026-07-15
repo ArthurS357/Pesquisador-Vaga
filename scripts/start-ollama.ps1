@@ -29,18 +29,32 @@ if ([Environment]::GetEnvironmentVariable("OLLAMA_CONTEXT_LENGTH", "User") -ne $
 }
 $env:OLLAMA_CONTEXT_LENGTH = $contextLength
 
+# ── Ollama instalado? ──────────────────────────────────────────────────────────
+if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
+    Write-Host "ERRO: 'ollama' nao encontrado no PATH. Instale via https://ollama.com/download/windows e reabra o terminal."
+    exit 1
+}
+
 # ── Parametros de sondagem de prontidao ────────────────────────────────────────
 # ProbeTimeout 5s (era 2s): tolera cold start / I/O lento, onde a conexao e aceita
 # mas a resposta demora. MaxAttempts 12 com sleep de 1s => orcamento de ate ~72s
 # no pior caso (12 x (1s sleep + 5s probe)); na pratica sobe nas 1as tentativas.
 $probeTimeout = 5
 $maxAttempts  = 12
-$tagsUrl      = "http://localhost:11434/api/tags"
+# Base do endpoint acompanha OLLAMA_URL do .env (host/porta alternativos).
+$baseUrl = "http://localhost:11434"
+if (Test-Path $envFile) {
+    $urlMatch = Select-String -Path $envFile -Pattern '^\s*OLLAMA_URL\s*=\s*(\S+)' | Select-Object -First 1
+    if ($urlMatch) {
+        try { $baseUrl = ([Uri]$urlMatch.Matches.Groups[1].Value).GetLeftPart([UriPartial]::Authority) } catch { }
+    }
+}
+$tagsUrl = "$baseUrl/api/tags"
 
 # Ja esta no ar?
 try {
     Invoke-WebRequest -Uri $tagsUrl -UseBasicParsing -TimeoutSec $probeTimeout | Out-Null
-    Write-Host "Ollama ja esta rodando em http://localhost:11434"
+    Write-Host "Ollama ja esta rodando em $baseUrl"
     exit 0
 } catch { }
 
