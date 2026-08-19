@@ -15,7 +15,9 @@
     "ollama:start": "powershell -ExecutionPolicy Bypass -File scripts/start-ollama.ps1 || ollama serve",
     "ollama:status": "powershell -ExecutionPolicy Bypass -File scripts/ollama-status.ps1",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval:judge": "cross-env NODE_OPTIONS=--use-system-ca tsx src/eval/eval-judge.ts",
+    "extract-candidates": "tsx src/eval/extract-candidates.ts"
   },
   "keywords": [],
   "author": "",

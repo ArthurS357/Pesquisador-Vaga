@@ -1,0 +1,46 @@
+{
+  "date": "2026-07-13",
+  "model": "qwen3:8b",
+  "goldenSetSize": 3,
+  "metrics": {
+    "mae": 0,
+    "decisionAccuracy": 1,
+    "lensAccuracy": 1,
+    "avgLatencyMs": 20109
+  },
+  "items": [
+    {
+      "id": "manual-001",
+      "expectedScore": 85,
+      "gotScore": 85,
+      "expectedDecision": "apply",
+      "gotDecision": "apply",
+      "expectedLens": "backend",
+      "gotLens": "backend",
+      "latencyMs": 32994,
+      "reasoning": "Direct backend engineering role matching Node.js/TypeScript stack. Core technologies (Node.js, PostgreSQL) align with candidate's expertise in backend development and database interactions."
+    },
+    {
+      "id": "manual-002",
+      "expectedScore": 55,
+      "gotScore": 55,
+      "expectedDecision": "apply",
+      "gotDecision": "apply",
+      "expectedLens": "fullstack",
+      "gotLens": "fullstack",
+      "latencyMs": 16318,
+      "reasoning": "Genuine engineering role but partial stack overlap (React yes, .NET not in profile). Hybrid/on-site requirement adds logistical complexity."
+    },
+    {
+      "id": "manual-003",
+      "expectedScore": 15,
+      "gotScore": 15,
+      "expectedDecision": "skip",
+      "gotDecision": "skip",
+      "expectedLens": "sales",
+      "gotLens": "sales",
+      "latencyMs": 11014,
+      "reasoning": "Primary function is commercial revenue generation (blocked Sales category) and requires US work authorization the candidate lacks."
+    }
+  ]
+}

@@ -67,7 +67,9 @@ function Pager({ state, total }: { state: JobFilterState; total: number }) {
 /** Filtros da fila SEM o status — reusado pela lista e pelas contagens das abas. */
 export function queueFiltersWhere(state: JobFilterState): Prisma.JobWhereInput {
   return {
-    ...(state.q ? { title: { contains: state.q } } : {}),
+    ...(state.q
+      ? { OR: [{ title: { contains: state.q } }, { company: { contains: state.q } }] }
+      : {}),
     ...(state.min > 0 ? { score: { gte: state.min } } : {}),
     ...(state.sources.length ? { source: { in: state.sources } } : {}),
     ...(state.lenses.length ? { lens: { in: state.lenses } } : {}),

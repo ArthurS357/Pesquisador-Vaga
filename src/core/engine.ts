@@ -3,6 +3,7 @@ import { JobAdapter, Job } from "./types";
 import { canonicalHash } from "./utils";
 import { rankJob } from "./ranker";
 import { judgeWithLlm } from "./llm-judge";
+import { OLLAMA_MODEL } from "./ollama";
 import { HUMAN_OWNED_STATUSES } from "./db-clean-core";
 import { isCacheStale } from "./cache-ttl";
 import { prisma } from "../db/prisma";
@@ -84,6 +85,9 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     reasoning: string | null;
     updatedAt: Date | null;
     judgedAt: Date | null;
+    judgeSource: string | null;
+    judgeModel: string | null;
+    judgeLatencyMs: number | null;
   };
 
   const hashes = [
@@ -104,6 +108,7 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
           source: true, sourceId: true, status: true,
           canonicalHash: true, score: true, lens: true, reasoning: true,
           updatedAt: true, judgedAt: true,
+          judgeSource: true, judgeModel: true, judgeLatencyMs: true,
         },
       })
     : [];
@@ -175,6 +180,10 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
     let finalReasoning: string | null = null;
     // Quando o LLM julgou (TTL). Carimbado só em veredito real do LLM.
     let finalJudgedAt: Date | null = null;
+    // Proveniência do score atual (debug/eval). Segue o mesmo fluxo de judgedAt.
+    let finalJudgeSource: string | null = null;
+    let finalJudgeModel: string | null = null;
+    let finalJudgeLatencyMs: number | null = null;
 
     if (cacheUsable && !cacheStale) {
       // Estágio 2 skip: usa score em cache (dentro do TTL)
@@ -182,6 +191,9 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
       finalLens = cached!.lens ?? heuristic.lens;
       finalReasoning = cached!.reasoning ?? null;
       finalJudgedAt = cached!.judgedAt; // herda a idade do veredito em cache
+      finalJudgeSource = cached!.judgeSource;
+      finalJudgeModel = cached!.judgeModel;
+      finalJudgeLatencyMs = cached!.judgeLatencyMs;
       countCacheHit++;
       console.info(`  ✦ [CACHE] "${job.title}" @ ${job.company} (score=${finalScore}, lens=${finalLens})`);
     } else {
@@ -190,23 +202,28 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
       }
       // Estágio 2: LLM Judge via Ollama
       console.info(`  → [LLM] Avaliando "${job.title}" @ ${job.company}...`);
+      const judgeStart = performance.now();
       const llmResult = await judgeWithLlm(
         job.title,
         job.company,
         job.description ?? ""
       );
+      finalJudgeLatencyMs = Math.round(performance.now() - judgeStart);
 
       if (llmResult) {
         finalScore = llmResult.score;
         finalLens = llmResult.lens;
         finalReasoning = llmResult.reasoning;
         finalJudgedAt = runStartTime; // veredito fresco → carimba agora
+        finalJudgeSource = "ollama-qwen3";
+        finalJudgeModel = OLLAMA_MODEL;
         countLlmJudged++;
         console.info(`  ✓ [LLM] score=${finalScore}, lens=${finalLens} — ${llmResult.reasoning}`);
       } else {
         // Ollama offline ou JSON inválido → usa heurística como fallback.
         // Preserva o judgedAt anterior: não houve veredito novo do LLM.
         finalJudgedAt = existing?.judgedAt ?? null;
+        finalJudgeSource = "heuristic";
         console.info(`  ↩ [FALLBACK] "${job.title}" — usando score heurístico ${finalScore}`);
       }
     }
@@ -239,6 +256,9 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
         lens: finalLens,
         reasoning: finalReasoning,
         judgedAt: finalJudgedAt,
+        judgeSource: finalJudgeSource,
+        judgeModel: finalJudgeModel,
+        judgeLatencyMs: finalJudgeLatencyMs,
       },
       create: {
         source: job.source,
@@ -256,6 +276,9 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
         lens: finalLens,
         reasoning: finalReasoning,
         judgedAt: finalJudgedAt,
+        judgeSource: finalJudgeSource,
+        judgeModel: finalJudgeModel,
+        judgeLatencyMs: finalJudgeLatencyMs,
       },
     }));
 
@@ -271,6 +294,9 @@ export async function collect(adapters: JobAdapter[], concurrency = 3): Promise<
       reasoning: finalReasoning,
       updatedAt: job.updatedAt ?? null,
       judgedAt: finalJudgedAt,
+      judgeSource: finalJudgeSource,
+      judgeModel: finalJudgeModel,
+      judgeLatencyMs: finalJudgeLatencyMs,
     };
     existingByKey.set(`${job.source}:${job.sourceId}`, writtenRow);
     if (finalReasoning !== null && finalScore !== null && !existingByHash.has(hash)) {
